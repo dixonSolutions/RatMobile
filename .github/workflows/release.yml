@@ -40,7 +40,7 @@ jobs:
         run: |
           # Ubuntu 24.04+ restricts unprivileged user namespaces, which Chromium's sandbox needs.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npx playwright install --with-deps chromium
+          npx playwright-core install --with-deps chromium
           echo "CHROMIUM=$(node -p "require('playwright-core').chromium.executablePath()")" >> "$GITHUB_ENV"
 
       - name: Build
