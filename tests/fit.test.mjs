@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { launch, freshProfile, swEval, sleep, ROOT } from './harness.mjs';
 import { serve } from './server.mjs';
 
-const SIZES = (process.env.SIZES || '1440x960,960x1440,720x960').split(',').map((s) => s.split('x').map(Number));
+const SIZES = (process.env.SIZES || '1152x720,768x1100,576x720,1440x960').split(',').map((s) => s.split('x').map(Number));
 
 let server;
 before(async () => { server = await serve(join(ROOT, 'tests/fixtures')); });
@@ -108,8 +108,14 @@ for (const [w, h] of SIZES) {
       test(`${name}: min-width app is zoomed to fit`, async () => {
         const url = await open(name);
         await settle(page, 1200);
-        assert.equal(await canScrollX(page), 0, 'page scrolls horizontally');
         const z = await zoomOf(b.context, url);
+        const need = await page.evaluate(() => (document.documentElement.clientWidth / document.documentElement.scrollWidth));
+        if (z <= 0.3 + 0.005 && need < 0.99) {
+          // Would need less than the 30% readability floor: stop there, keep the rest reachable (never clip content).
+          assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-rm-clip')), false, 'content clipped');
+          return;
+        }
+        assert.equal(await canScrollX(page), 0, 'page scrolls horizontally');
         assert.ok(z < 1 && z >= 0.3, `zoom ${z}`);
         const r = await page.evaluate((i) => ({ right: document.getElementById(i).getBoundingClientRect().right, iw: innerWidth }), id);
         assert.ok(r.right <= r.iw + 2, `#${id} right ${r.right} beyond viewport ${r.iw}`);

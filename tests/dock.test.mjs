@@ -38,11 +38,11 @@ const isOpen = async () => (await dockFrame()).evaluate(() => document.body.clas
 const frameWidth = () => page.evaluate(() => document.getElementById('ratmobile-dock').getBoundingClientRect().width);
 const activeTabUrl = () => swEval(b.context, async () => (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.url);
 
-async function touchSwipe(x0, y0, x1, y1, steps = 12) {
+async function touchSwipe(x0, y0, x1, y1, steps = 12, stepMs = 16) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
   for (let i = 1; i <= steps; i++) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * i) / steps, y: y0 + ((y1 - y0) * i) / steps }] });
-    await sleep(16);
+    await sleep(stepMs);
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await sleep(450);
@@ -107,8 +107,8 @@ describe('dock', () => {
     assert.equal(Math.round(await frameWidth()), 56);
   });
 
-  test('short swipe snaps back closed', async () => {
-    await touchSwipe(20, 500, 70, 500, 4);
+  test('short, slow drag snaps back closed (a fast flick would open)', async () => {
+    await touchSwipe(20, 500, 70, 500, 5, 80);
     assert.equal(await isOpen(), false);
     await sleep(300);
     assert.equal(Math.round(await frameWidth()), 56);
@@ -131,7 +131,7 @@ describe('dock', () => {
     await swEval(b.context, async (url) => { const t = (await chrome.tabs.query({})).find((x) => x.url === url); await chrome.tabs.sendMessage(t.id, { type: 'overlay:toggle' }, { frameId: 0 }); }, page.url());
     await sleep(400);
     assert.equal(await isOpen(), true);
-    await tap(1200, 400);
+    await tap((await page.evaluate(() => innerWidth)) - 60, 400);
     assert.equal(await isOpen(), false);
   });
 

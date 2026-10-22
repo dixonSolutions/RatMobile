@@ -60,7 +60,8 @@ export async function launch({
     '--disable-features=DialMediaRouteProvider,MediaRouter',
     '--password-store=basic',
     `--window-size=${width},${height}`,
-    `--force-device-scale-factor=${dsf}`,
+    // Headed: the compositor already applies the display scale (2x on the Surface).
+    ...(headless ? [`--force-device-scale-factor=${dsf}`] : []),
     ...(extensionDir ? [`--load-extension=${extensionDir}`, `--disable-extensions-except=${extensionDir}`] : []),
     ...(headless ? ['--headless=new'] : ['--ozone-platform=wayland']),
     ...args,
