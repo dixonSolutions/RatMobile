@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RatMobile tabs</title>
+<link rel="stylesheet" href="ui.css">
+<style>html, body { height: 100%; } body { overflow: hidden; } #panel { height: 100%; }</style>
+</head>
+<body>
+<div id="panel"></div>
+<script type="module">
+  import { createTabsView } from './tabs-view.js';
+  let wid = null;
+  const getWindowId = async () => (wid ??= (await chrome.windows.getCurrent()).id);
+  createTabsView(document.getElementById('panel'), { getWindowId });
+</script>
+</body>
+</html>

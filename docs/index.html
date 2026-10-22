@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RatMobile — tablet mode for Chromium</title>
+<meta name="description" content="Chromium extension: pages always fit the width, slide-over vertical tab dock with pinned tabs, crash-proof session snapshots.">
+<link rel="icon" href="icon.png">
+<style>
+  :root { color-scheme: light dark; --bg: #f6f5f3; --panel: #fff; --fg: #1d1b19; --muted: #6d6863; --line: #e2dfdb; --accent: #d9480f; --code: #f0eeeb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1a19; --panel: #242322; --fg: #ece9e5; --muted: #a39e98; --line: #3a3835; --accent: #ff7a3d; --code: #2e2c2a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Cantarell, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { display: flex; align-items: center; gap: 14px; font-size: 34px; letter-spacing: -.02em; margin: 0 0 6px; }
+  h1 img { width: 52px; height: 52px; }
+  .lead { color: var(--muted); font-size: 18px; margin: 0 0 28px; }
+  h2 { font-size: 20px; margin: 36px 0 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin: 12px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .tag { font-size: 12px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .05em; }
+  pre, code { font: 14px/1.5 ui-monospace, "Cascadia Code", "DejaVu Sans Mono", monospace; }
+  pre { background: var(--code); border-radius: 10px; padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  code { background: var(--code); border-radius: 6px; padding: 1px 6px; }
+  pre code { background: none; padding: 0; }
+  a { color: var(--accent); }
+  .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; padding: 10px 18px; border-radius: 12px; margin: 6px 8px 6px 0; }
+  .btn.alt { background: var(--code); color: var(--fg); }
+  ol, ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="icon.png" alt="">RatMobile</h1>
+  <p class="lead">A comfortable, tablet-style Chromium. Pages always fit the width, so you never scroll sideways. A slide-over vertical tab dock keeps pinned tabs on top. Session snapshots survive crashes and force shutdowns.</p>
+  <p><a class="btn" href="ratmobile.crx">Download ratmobile.crx</a><a class="btn alt" href="ratmobile.zip">ratmobile.zip (unpacked)</a></p>
+  <p class="muted">Version <span id="v">…</span> · <a href="https://github.com/dixonSolutions/RatMobile">Source on GitHub</a> (MIT). Not on the Chrome Web Store. Every push to <code>main</code> builds a new version, and installed copies update themselves.</p>
+
+  <h2>Install</h2>
+  <div class="card">
+    <span class="tag">Recommended · auto-updates</span>
+    <h3>One command (Linux, Chromium / Chrome / Brave, native or Flatpak)</h3>
+    <pre><code>curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh | bash</code></pre>
+    <p>Restart the browser. If it says <i>New extension added</i>, click <b>Enable</b>. Add <code>-s -- --restore-on</code> to also turn on <i>Continue where you left off</i> (close the browser first).</p>
+  </div>
+  <div class="card">
+    <span class="tag">Developer mode · auto-updates</span>
+    <h3>Drag and drop the CRX</h3>
+    <ol>
+      <li>Download <a href="ratmobile.crx">ratmobile.crx</a>.</li>
+      <li>Open <code>chrome://extensions</code> and turn on <b>Developer mode</b> (top right).</li>
+      <li>Drag <code>ratmobile.crx</code> <b>from your file manager</b> onto the page, then click <b>Add extension</b>.</li>
+    </ol>
+    <p class="muted">Chromium checks <code>updates.xml</code> every few hours. Click <b>Update</b> on <code>chrome://extensions</code> to update now. You can switch Developer mode off afterwards.</p>
+  </div>
+  <div class="card">
+    <span class="tag">Developer mode · Load unpacked</span>
+    <h3>Unpacked folder, kept current by a timer</h3>
+    <pre><code>curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh | bash -s -- --unpacked</code></pre>
+    <p>Then on <code>chrome://extensions</code> click <b>Load unpacked</b> and pick <code>~/.local/share/ratmobile/extension</code>. An hourly systemd user timer refreshes the folder, and RatMobile reloads itself when it changes.</p>
+  </div>
+
+  <h2>What you get</h2>
+  <ul>
+    <li><b>No sideways scrolling.</b> Wide images, code, tables, long links and flex rows are reflowed. Off-canvas leftovers are clipped. Fixed-width web apps zoom out to fit, the way a phone shows a desktop site, and you can pinch to zoom in. Your own <kbd>Ctrl</kbd>+<kbd>+</kbd> always wins.</li>
+    <li><b>Icon dock + slide-over tabs.</b> A slim dock of tab icons on the left is always usable. Swipe right from it, or tap ☰, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>, to slide out a large overlay for picking tabs. It has search, groups, other windows, long-press actions and drag-to-reorder.</li>
+    <li><b>Pinned tabs on top</b> of both the dock and the overlay. Drag a tab into <i>Pinned</i>, or long-press it and choose <i>Pin</i>.</li>
+    <li><b>Crash-proof sessions.</b> Windows, pinned tabs and groups are snapshotted continuously. After a crash, a <code>kill -9</code> or a forced power-off, everything comes back on the next start, lazily loaded. Older snapshots stay in the Sessions view.</li>
+  </ul>
+</main>
+<script>
+  fetch('version.json', { cache: 'no-store' }).then((r) => r.json()).then((j) => { document.getElementById('v').textContent = j.version; }).catch(() => {});
+</script>
+</body>
+</html>

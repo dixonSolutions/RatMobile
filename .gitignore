@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.pem
+.test-profile/
+test-results/

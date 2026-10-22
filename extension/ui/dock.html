@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RatMobile dock</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  html, body { height: 100%; overflow: hidden; background: transparent; }
+  #scrim { position: fixed; inset: 0; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+  #panel { position: fixed; left: 0; top: 0; bottom: 0; width: var(--ow, 440px); max-width: calc(100vw - 40px); transform: translateX(-105%);
+    transition: transform .24s cubic-bezier(.2,.8,.2,1); box-shadow: var(--shadow); border-radius: 0 18px 18px 0; overflow: hidden; z-index: 3; }
+  body.open #scrim { opacity: 1; pointer-events: auto; }
+  body.open #panel { transform: translateX(0); }
+  body.dragging #panel, body.dragging #scrim { transition: none; }
+  #dock { position: fixed; left: 0; top: 0; bottom: 0; width: var(--dw, 56px); background: var(--bg); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 4px; z-index: 2; touch-action: pan-y; user-select: none; }
+  #dock .scroll { flex: 1; min-height: 0; width: 100%; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    scrollbar-width: none; overscroll-behavior: contain; touch-action: pan-y; padding: 2px 0; }
+  #dock .scroll::-webkit-scrollbar { display: none; }
+  .d { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; position: relative; }
+  .d:hover { background: var(--panel-2); }
+  .d.active { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+  .d.discarded img { opacity: .5; }
+  .d img { width: 22px; height: 22px; border-radius: 4px; pointer-events: none; }
+  .d .dot { position: absolute; right: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .d.loading::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sep { width: 28px; height: 1px; background: var(--line); margin: 4px 0; flex: none; }
+  .count { font-size: 11px; color: var(--muted); margin-top: -2px; }
+  #grip { position: fixed; left: var(--dw, 56px); top: 0; bottom: 0; width: 10px; touch-action: none; z-index: 1; }
+</style>
+</head>
+<body>
+<div id="scrim"></div>
+<nav id="dock" aria-label="Tabs dock">
+  <button class="d" id="open" title="All tabs (Alt+Shift+A)"></button>
+  <div class="scroll" id="strip"></div>
+  <span class="count" id="count"></span>
+  <button class="d" id="new" title="New tab"></button>
+</nav>
+<aside id="panel"></aside>
+<script type="module" src="dock.js"></script>
+</body>
+</html>

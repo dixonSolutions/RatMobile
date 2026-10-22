@@ -1,0 +1,99 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f3;
+  --panel: #ffffff;
+  --panel-2: #f0eeeb;
+  --fg: #1d1b19;
+  --muted: #6d6863;
+  --line: #e2dfdb;
+  --accent: #d9480f;
+  --accent-soft: #fbe3d6;
+  --accent-fg: #ffffff;
+  --scrim: rgba(20, 16, 12, 0.32);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.22);
+  --radius: 14px;
+  --row: 52px;
+  font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Cantarell, Ubuntu, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a19;
+    --panel: #242322;
+    --panel-2: #2e2c2a;
+    --fg: #ece9e5;
+    --muted: #a39e98;
+    --line: #3a3835;
+    --accent: #ff7a3d;
+    --accent-soft: #4a2a1b;
+    --accent-fg: #1b1a19;
+    --scrim: rgba(0, 0, 0, 0.5);
+    --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { color: var(--fg); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+img.fav { width: 20px; height: 20px; flex: none; border-radius: 4px; }
+.icon-btn { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+.icon-btn:hover { background: var(--panel-2); }
+.icon-btn svg { width: 20px; height: 20px; }
+.hidden { display: none !important; }
+
+/* ---------- Tabs view (overlay + side panel) ---------- */
+.tv { display: flex; flex-direction: column; height: 100%; background: var(--panel); min-width: 0; }
+.tv-head { display: flex; gap: 6px; align-items: center; padding: 10px 10px 8px; }
+.tv-search { flex: 1; min-width: 0; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--fg); padding: 0 14px; font: inherit; }
+.tv-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 12px; overscroll-behavior: contain; touch-action: pan-y; }
+.tv-section { margin-top: 10px; }
+.tv-label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; display: flex; align-items: center; gap: 8px; }
+.tv-label .count { font-weight: 500; }
+.pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; padding: 0 2px; }
+.pin { height: 68px; border-radius: 12px; background: var(--panel-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 4px 6px; min-width: 0; position: relative; }
+.pin span { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin.active { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.pin img.fav { width: 24px; height: 24px; }
+.pins-empty { font-size: 13px; color: var(--muted); padding: 2px 8px 6px; }
+.row { display: flex; align-items: center; gap: 12px; height: var(--row); padding: 0 6px 0 12px; border-radius: 12px; position: relative; min-width: 0; user-select: none; }
+.row:hover { background: var(--panel-2); }
+.row.active { background: var(--accent-soft); }
+.row.active::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent); }
+.row .txt { flex: 1; min-width: 0; }
+.row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .host { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .x { opacity: .55; }
+.row:hover .x, .row.active .x { opacity: 1; }
+.row.discarded .fav, .row.discarded .title { opacity: .55; }
+.row .badge { font-size: 11px; color: var(--muted); }
+.row.dragging { background: var(--panel); box-shadow: var(--shadow); z-index: 5; }
+.drop-line { height: 3px; background: var(--accent); border-radius: 2px; margin: -1px 8px; }
+.group-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.group-head .chip { width: 10px; height: 10px; border-radius: 50%; }
+.group-body { border-left: 2px solid var(--gcolor, var(--line)); margin-left: 10px; padding-left: 2px; }
+.tv-foot { display: flex; gap: 4px; padding: 8px; border-top: 1px solid var(--line); background: var(--panel); }
+.tv-foot .grow { flex: 1; }
+.pill { height: 40px; padding: 0 14px; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2); }
+.pill.primary { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.pill svg { width: 18px; height: 18px; }
+.win-head { cursor: pointer; }
+.snap { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 6px 2px; }
+.snap-top { display: flex; align-items: center; gap: 8px; }
+.snap-title { flex: 1; min-width: 0; font-weight: 600; }
+.snap-meta { font-size: 12px; color: var(--muted); }
+.snap-favs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.snap-favs img { width: 16px; height: 16px; }
+.snap-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.snap-actions .pill { height: 34px; font-size: 13px; }
+.empty { color: var(--muted); padding: 20px 10px; text-align: center; }
+
+/* ---------- Action sheet ---------- */
+.sheet-scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--panel); width: min(420px, 100%); border-radius: 18px 18px 0 0; padding: 8px 8px 14px; box-shadow: var(--shadow); }
+.sheet h3 { margin: 6px 10px 8px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet button { display: flex; width: 100%; height: 48px; align-items: center; gap: 12px; padding: 0 14px; border-radius: 12px; }
+.sheet button:hover { background: var(--panel-2); }
+.sheet button.danger { color: #d6336c; }
+.tv-section.drop-target .pins, .tv-section.drop-target .pins-empty { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 12px; }

@@ -1,0 +1,109 @@
+name: Build, test & release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Version
+        id: version
+        run: |
+          base=$(node -p "require('./extension/manifest.json').version.split('.').slice(0,2).join('.')")
+          echo "version=${base}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Chromium for tests
+        run: |
+          npx playwright install --with-deps chromium
+          echo "CHROMIUM=$(node -p "require('playwright-core').chromium.executablePath()")" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          RATMOBILE_VERSION: ${{ steps.version.outputs.version }}
+          RATMOBILE_KEY: ${{ secrets.RATMOBILE_KEY }}
+        run: node scripts/build.mjs
+
+      - name: Test (real Chromium, headless)
+        env:
+          RATMOBILE_KEY: ${{ secrets.RATMOBILE_KEY }}
+        run: npm test
+
+      - name: Build release (tests rebuild dist/)
+        env:
+          RATMOBILE_VERSION: ${{ steps.version.outputs.version }}
+          RATMOBILE_KEY: ${{ secrets.RATMOBILE_KEY }}
+        run: |
+          node scripts/build.mjs
+          test -f dist/ratmobile.crx || { echo "::error::RATMOBILE_KEY secret missing: no CRX built"; [ "${{ github.event_name }}" = "pull_request" ] || exit 1; }
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r docs/. site/
+          cp dist/ratmobile.zip dist/version.json scripts/install.sh site/
+          if [ -f dist/ratmobile.crx ]; then cp dist/ratmobile.crx dist/ratmobile-*.crx dist/updates.xml site/; fi
+          touch site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ratmobile-${{ steps.version.outputs.version }}
+          path: |
+            dist/ratmobile.zip
+            dist/ratmobile.crx
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4
+
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ratmobile-${{ needs.build.outputs.version }}
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.build.outputs.version }}
+        run: |
+          gh release create "v$V" ratmobile.crx ratmobile.zip \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+            --title "RatMobile $V" \
+            --notes "Auto-built from ${{ github.sha }}. Installed copies update themselves from https://dixonsolutions.github.io/RatMobile/updates.xml within a few hours (or press Update on chrome://extensions)."

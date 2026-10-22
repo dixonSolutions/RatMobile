@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Tab</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  html { background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 14vh 20px 40px; background: var(--bg); }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 24px; }
+  .brand img { width: 44px; height: 44px; }
+  form { width: min(640px, 100%); }
+  #q { width: 100%; height: 56px; border-radius: 28px; border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+    padding: 0 24px; font: inherit; font-size: 17px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .tiles { width: min(720px, 100%); display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-top: 32px; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: 16px; text-decoration: none; color: var(--fg); min-width: 0; }
+  .tile:hover { background: var(--panel); }
+  .tile .ic { width: 52px; height: 52px; border-radius: 16px; background: var(--panel); display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .tile .ic img { width: 26px; height: 26px; }
+  .tile span { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card { width: min(640px, 100%); margin-top: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .card .grow { flex: 1; min-width: 200px; }
+  .card .meta { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="brand"><img src="../icons/128.png" alt="">RatMobile</div>
+  <form id="f"><input id="q" type="search" placeholder="Search or type a URL" autofocus autocomplete="off" aria-label="Search or type a URL"></form>
+  <div id="restore" class="card hidden"></div>
+  <div class="tiles" id="tiles"></div>
+  <script type="module" src="newtab.js"></script>
+  <script src="../content/ratmobile.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "ratmobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RatMobile - tablet-style Chromium extension",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "lint": "node scripts/lint.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.1"
+  }
+}
