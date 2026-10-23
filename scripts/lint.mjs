@@ -16,10 +16,12 @@ for (const f of [...walk(ext), ...walk(join(root, 'scripts')), ...walk(join(root
 
 const m = JSON.parse(readFileSync(join(ext, 'manifest.json'), 'utf8'));
 const refs = [
-  m.background.service_worker, m.options_page, m.side_panel.default_path, m.chrome_url_overrides.newtab,
+  m.background.service_worker, m.options_page, m.action.default_popup, m.side_panel?.default_path, m.chrome_url_overrides?.newtab,
   ...Object.values(m.icons), ...Object.values(m.action.default_icon),
   ...m.content_scripts.flatMap((c) => c.js),
-  ...m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => !r.includes('*')),
+  ...(m.web_accessible_resources || []).flatMap((w) => w.resources).filter((r) => !r.includes('*')),
+].filter(Boolean);
+const _unused = [
 ];
 for (const r of refs) if (!existsSync(join(ext, r))) errors.push(`manifest references missing file: ${r}`);
 

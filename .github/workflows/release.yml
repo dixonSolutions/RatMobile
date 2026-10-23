@@ -66,6 +66,7 @@ jobs:
         run: |
           mkdir -p site
           cp -r docs/. site/
+          mkdir -p site/screenshots && cp -r docs/screenshots/. site/screenshots/ 2>/dev/null || true
           cp dist/ratmobile.zip dist/version.json scripts/install.sh site/
           if [ -f dist/ratmobile.crx ]; then cp dist/ratmobile.crx dist/ratmobile-*.crx dist/updates.xml site/; fi
           touch site/.nojekyll

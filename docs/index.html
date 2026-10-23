@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RatMobile — tablet mode for Chromium</title>
-<meta name="description" content="Chromium extension: pages always fit the width, slide-over vertical tab dock with pinned tabs, crash-proof session snapshots.">
+<meta name="description" content="Chromium extension: pages always fit the width, Chromium's own vertical tabs set up for a tablet, crash-proof session snapshots.">
 <link rel="icon" href="icon.png">
 <style>
   :root { color-scheme: light dark; --bg: #f6f5f3; --panel: #fff; --fg: #1d1b19; --muted: #6d6863; --line: #e2dfdb; --accent: #d9480f; --code: #f0eeeb; }
@@ -34,7 +34,7 @@
 <body>
 <main>
   <h1><img src="icon.png" alt="">RatMobile</h1>
-  <p class="lead">A comfortable, tablet-style Chromium. Pages always fit the width, so you never scroll sideways. A slide-over vertical tab dock keeps pinned tabs on top. Session snapshots survive crashes and force shutdowns.</p>
+  <p class="lead">A comfortable, tablet-style Chromium. Pages always fit the width, so you never scroll sideways. Chromium's own vertical tabs are set up for a tablet. Session snapshots survive crashes and force shutdowns.</p>
   <p><a class="btn" href="ratmobile.crx">Download ratmobile.crx</a><a class="btn alt" href="ratmobile.zip">ratmobile.zip (unpacked)</a></p>
   <p class="muted">Version <span id="v">…</span> · <a href="https://github.com/dixonSolutions/RatMobile">Source on GitHub</a> (MIT). Not on the Chrome Web Store. Every push to <code>main</code> builds a new version, and installed copies update themselves.</p>
 
@@ -43,7 +43,7 @@
     <span class="tag">Recommended · auto-updates</span>
     <h3>One command (Linux, Chromium / Chrome / Brave, native or Flatpak)</h3>
     <pre><code>curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh | bash</code></pre>
-    <p>Restart the browser. If it says <i>New extension added</i>, click <b>Enable</b>. Add <code>-s -- --restore-on</code> to also turn on <i>Continue where you left off</i> (close the browser first).</p>
+    <p>Close the browser first, then start it again. If it says <i>New extension added</i>, click <b>Enable</b>. The installer also sets up Chromium's vertical tabs for a tablet: collapsed to icons, expand on hover, and <i>Continue where you left off</i>. Add <code>-s -- --no-tablet</code> to leave your browser settings alone.</p>
   </div>
   <div class="card">
     <span class="tag">Developer mode · auto-updates</span>
@@ -64,9 +64,8 @@
 
   <h2>What you get</h2>
   <ul>
-    <li><b>No sideways scrolling.</b> Wide images, code, tables, long links and flex rows are reflowed. Off-canvas leftovers are clipped. Fixed-width web apps zoom out to fit, the way a phone shows a desktop site, and you can pinch to zoom in. Your own <kbd>Ctrl</kbd>+<kbd>+</kbd> always wins.</li>
-    <li><b>Icon dock + slide-over tabs.</b> A slim dock of tab icons on the left is always usable. Swipe right from it, or tap ☰, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>, to slide out a large overlay for picking tabs. It has search, groups, other windows, long-press actions and drag-to-reorder.</li>
-    <li><b>Pinned tabs on top</b> of both the dock and the overlay. Drag a tab into <i>Pinned</i>, or long-press it and choose <i>Pin</i>.</li>
+    <li><img src="screenshots/compare-portrait.jpg" alt="Before and after in portrait" style="max-width:100%;border-radius:12px;margin:6px 0"><br><b>No sideways scrolling.</b> Wide images, code, tables, long links and flex rows are reflowed. Off-canvas leftovers are clipped. Fixed-width web apps zoom out to fit, the way a phone shows a desktop site, and you can pinch to zoom in. Your own <kbd>Ctrl</kbd>+<kbd>+</kbd> always wins.</li>
+    <li><b>Chromium's own vertical tabs</b>, collapsed to an icon strip that is always usable, sliding over the page on hover to pick a tab, with <b>pinned tabs on top</b>. RatMobile adds no tab UI of its own.</li>
     <li><b>Crash-proof sessions.</b> Windows, pinned tabs and groups are snapshotted continuously. After a crash, a <code>kill -9</code> or a forced power-off, everything comes back on the next start, lazily loaded. Older snapshots stay in the Sessions view.</li>
   </ul>
 </main>

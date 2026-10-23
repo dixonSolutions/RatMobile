@@ -84,7 +84,7 @@ for (const [w, h] of SIZES) {
 
     test('wide image is scaled into the column', async () => {
       await open('wide-image.html');
-      const r = await page.evaluate(() => { const i = document.getElementById('img').getBoundingClientRect(); return { right: i.right, cw: document.documentElement.clientWidth + parseFloat(getComputedStyle(document.documentElement).marginLeft) }; });
+      const r = await page.evaluate(() => ({ right: document.getElementById('img').getBoundingClientRect().right, cw: document.documentElement.clientWidth }));
       assert.ok(r.right <= r.cw + 1, `image right ${r.right} > ${r.cw}`);
     });
 
@@ -128,20 +128,6 @@ for (const [w, h] of SIZES) {
       });
     }
 
-    test('fixed header and rail move out from under the dock', async () => {
-      await open('fixed-header.html');
-      const get = () => page.evaluate(() => Object.fromEntries(['burger', 'rail', 'bar', 'later'].map((i) => { const r = document.getElementById(i).getBoundingClientRect(); return [i, { left: r.left, right: r.right }]; })));
-      let r = await get();
-      assert.ok(r.burger.left >= 56, `burger at ${r.burger.left}`);
-      assert.ok(r.rail.left >= 56, `rail at ${r.rail.left}`);
-      assert.ok(r.bar.right <= w + 1, `bar overflows: ${r.bar.right}`);
-      await page.evaluate(() => document.getElementById('later').classList.add('fixed'));
-      await sleep(400);
-      r = await get();
-      assert.ok(r.later.left >= 56, `late-fixed element at ${r.later.left}`);
-      assert.equal(await canScrollX(page), 0);
-    });
-
     test('quirks-mode page is reflowed, not zoomed', async () => {
       const url = await open('quirks-table.html');
       assert.equal(await canScrollX(page), 0);
@@ -156,39 +142,15 @@ for (const [w, h] of SIZES) {
       assert.ok(minCell >= 40, `cells crushed to ${minCell}px`);
     });
 
-    test('absolutely positioned app root is not hidden under the dock', async () => {
-      await open('abs-left.html');
-      assert.ok((await page.evaluate(() => document.getElementById('app').getBoundingClientRect().left)) >= 56);
-    });
-
-    test('fixed bar whose left the site rewrites gets shifted again, and stays inside the window', async () => {
-      await open('fixed-rewrite.html');
-      await page.waitForFunction(() => document.title === 'rewritten');
-      await sleep(300);
-      const r = await page.evaluate(() => { const b = document.getElementById('bar').getBoundingClientRect(); return { left: b.left, right: b.right, iw: innerWidth }; });
-      assert.ok(r.left >= 56, `bar at ${r.left}`);
-      assert.ok(r.right <= r.iw + 1, `bar sticks out: ${r.right} > ${r.iw}`);
-    });
-
-    test('element made fixed by a late stylesheet is shifted', async () => {
-      await open('late-css.html');
-      await page.waitForFunction(() => document.title === 'late');
-      await sleep(500);
-      assert.ok((await page.evaluate(() => document.getElementById('menu').getBoundingClientRect().left)) >= 56);
-    });
-
-    test('full-bleed (100vw, negative margin) block stays out from under the dock', async () => {
+    test('full-bleed (100vw, negative margin) block: no sideways scroll', async () => {
       await open('bleed.html');
       assert.equal(await canScrollX(page), 0);
-      const r = await page.evaluate(() => document.getElementById('bleed').getBoundingClientRect());
-      assert.ok(r.left >= 55, `bleed starts at ${r.left}`);
     });
 
-    test('site that hides overflow: our shift does not push its header items off-screen', async () => {
+    test('site that hides overflow itself is not zoomed or reflowed', async () => {
       const url = await open('body-hidden-vw.html');
-      const r = await page.evaluate(() => ({ right: document.getElementById('rightitem').getBoundingClientRect().right, iw: document.documentElement.clientWidth + 56 }));
-      assert.ok(r.right <= r.iw + 1, `header item cut off: ${r.right} > ${r.iw}`);
       assert.equal(await zoomOf(b.context, url), 1);
+      assert.equal(await page.evaluate(() => document.querySelectorAll('[data-rm-fix]').length), 0);
     });
 
     test('zoom goes back up when a temporary overflow disappears', async () => {

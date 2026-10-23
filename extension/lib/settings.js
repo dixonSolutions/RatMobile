@@ -4,10 +4,6 @@ export const DEFAULTS = {
   fitEnabled: true,
   fitZoom: true, // zoom out min-width "apps" so they fit
   minZoom: 0.3,
-  // Dock: 'reserve' pushes the page right, 'float' overlays it, 'autohide' slides away while scrolling down, 'off'.
-  dockMode: 'reserve',
-  dockWidth: 56,
-  overlayWidth: 440,
   // Sessions
   autoRestore: true,
   lazyRestore: true,
@@ -43,9 +39,3 @@ export function hostOf(url) {
   }
 }
 
-// Live tabs: prefer the favicon the tab reports; fall back to Chromium's favicon cache.
-export function tabFavicon(tab, size = 32) {
-  const f = tab.favIconUrl;
-  if (f && /^(https?:|data:image\/)/.test(f) && f.length < 100000) return f;
-  return faviconUrl(tab.pendingUrl || tab.url, size);
-}

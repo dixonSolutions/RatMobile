@@ -5,28 +5,33 @@
 **A comfortable, tablet-style Chromium.** RatMobile is a Chromium extension. It is not on the Chrome Web Store: you install it in Developer mode or with the installer below, and it updates itself from this repo.
 
 - **Never scroll sideways.** Pages are made to fit the window width, whether in landscape, portrait or split screen.
-- **Icon dock + slide-over tabs.** A slim vertical dock of tab icons stays usable. Swipe right from it (or tap ☰, or press `Alt+Shift+A`) for a large overlay to pick tabs, with pinned tabs on top.
+- **Chromium's own vertical tabs, set up for a tablet.** Collapsed to an icon strip you can always use, expanding over the page on hover to pick a tab, with pinned tabs on top. The installer configures this; RatMobile adds no tab UI of its own.
 - **Crash-proof sessions.** Windows, pinned tabs and tab groups are snapshotted continuously and restored after a crash, a `kill -9`, or a forced power-off.
 
 **Install page:** https://dixonsolutions.github.io/RatMobile/
 
-| Icon dock (always usable) | Swipe right → slide-over tab overlay |
-|---|---|
-| ![Dock](docs/screenshots/dock.jpg) | ![Overlay](docs/screenshots/overlay.jpg) |
+Real Chromium 155, Surface Pro 9 in **portrait** (768 CSS px; the collapsed native tab strip leaves 712 px for the page):
 
-<sub>Real Chromium 155 on a Surface Pro 9 (2.5× scale, 1152 CSS px wide).</sub>
+![Before / after on Slashdot in portrait](docs/screenshots/compare-portrait.jpg)
+
+| Replay: the same sideways swipe | Native vertical tabs expanded |
+|---|---|
+| ![Replay](docs/screenshots/replay-portrait.gif) | ![Native tabs open](docs/screenshots/native-tabs-open.jpg) |
+
+More: [Wikipedia, Comparison of Linux distributions](docs/screenshots/compare-portrait-wikipedia.jpg) (scrolled 979 px sideways before). All captured with `node tests/visual.mjs`, which renders the whole browser window off-screen at the real device resolution.
+
 
 ## Install
 
 | Method | Auto-update | How |
 |---|---|---|
-| Installer (recommended) | ✅ | `curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh \| bash`, then restart the browser (click **Enable** if asked). |
+| Installer (recommended) | ✅ | Close the browser, run `curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh \| bash`, start it again (click **Enable** if asked). |
 | Developer mode, CRX | ✅ | Download [`ratmobile.crx`](https://dixonsolutions.github.io/RatMobile/ratmobile.crx). On `chrome://extensions`, turn on **Developer mode** and drag the file onto the page **from your file manager**. |
 | Developer mode, unpacked | ✅ via timer | `curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh \| bash -s -- --unpacked`, then **Load unpacked** → `~/.local/share/ratmobile/extension`. |
 
 The installer finds Chromium, Google Chrome and Brave profiles, both native and Flatpak (`~/.var/app/...`). It registers RatMobile's update feed with each through Chromium's per-user `External Extensions` mechanism. Options:
 
-- `--restore-on` also sets *On startup → Continue where you left off*. Close the browser first.
+- **Tablet setup** (default for browsers that are closed; `--tablet` to run only that, `--no-tablet` to skip): Chromium's own vertical tabs on, **collapsed** to an icon strip, **expand on hover**, and *On startup → Continue where you left off*. A backup of the settings file is kept next to it.
 - `--uninstall` removes everything the installer added.
 
 ### How updates work
@@ -61,27 +66,22 @@ A content script watches each page with a `ResizeObserver` and a `MutationObserv
 | Off-canvas menus parked outside the viewport | clip |
 | Fixed-width web apps with no responsive viewport | zoom the tab out to fit, the way a phone shows a desktop site; pinch to zoom in |
 
-Responsive pages are never zoomed. Well-behaved pages are not touched at all. If you zoom a tab yourself (`Ctrl +/−`), RatMobile stops auto-fitting it. To turn fit and dock off for a site, add it to the excluded list in settings, or use the `toggle-fit` command.
+Responsive pages are never zoomed. Well-behaved pages are not touched at all, and nothing is ever injected into the page besides one stylesheet. If you zoom a tab yourself (`Ctrl +/−`), RatMobile stops auto-fitting it. To turn fit off for a site, use the switch in the toolbar popup or `Alt+Shift+F`.
 
-### Dock and overlay
+### Tabs: Chromium's own vertical tab strip
 
-- **Dock:** a 56 px strip on the left of every page.
-  - Pinned tabs come first, then a separator, then the other tabs.
-  - Tap an icon to switch; middle-click to close.
-  - In *reserve* mode (default), the page and its fixed headers are pushed right so nothing hides under the dock. *Float* and *auto-hide* (slides away while you scroll down) are also available.
-- **Overlay:** swipe right from the dock (the panel follows your finger), tap ☰, long-press any icon, or press `Alt+Shift+A`. It has:
-  - Search
-  - A pinned grid
-  - Tab groups
-  - Other windows
-  - Long-press actions: pin, duplicate, mute, reload, move to a new window, close
-  - Drag to reorder, or drag into *Pinned*
-  - A **Sessions** view with snapshot history
+RatMobile doesn't draw any tab UI. Chromium 146+ has native vertical tabs, and that's what the installer sets up:
 
-  Close it by swiping left, tapping outside it, pressing Esc, or picking a tab.
-- **Native side panel and new tab page:** the action button opens the same tab list in Chromium's side panel, as a fallback on `chrome://` pages where extensions can't inject. The new tab page has the dock too.
+| Setting (Chromium preference) | Value | Effect |
+|---|---|---|
+| `vertical_tabs.enabled` | `true` | Tabs on the side |
+| `vertical_tabs.collapsed_state` | `true` | Collapsed to an icon strip that is always usable; pinned tabs as tiles on top |
+| `vertical_tabs.expand_on_hover` | `true` | The full list slides over the page while you pick a tab, then collapses again |
+| `session.restore_on_startup` | `1` | Continue where you left off |
 
-If Chromium's own vertical tabs are on (right-click the tab strip → *Show tabs vertically*), you get two tab lists. Switch Chromium's back to the top. Extensions can't change that setting.
+You can change all of these yourself by right-clicking the tab strip. Extensions can't change them, which is why the installer does it while the browser is closed. On a touchscreen, tap the expand button at the top of the strip; hover only applies to mouse and pen.
+
+The toolbar button opens a small popup with the per-site *fit to width* switch and the session snapshot history.
 
 ### Sessions
 
@@ -106,12 +106,16 @@ npm run lint
 npm test                    # real Chromium, headless, at 1440x960 / 960x1440 / 720x960 @2x
 HEADED=1 npm test           # watch it
 node tests/sites.mjs        # optional sweep over real websites
+node tests/visual.mjs       # before/after screenshots + replay GIFs of the whole browser window
+                            # (native vertical tabs included) at real device resolutions, rendered
+                            # off-screen with cage + grim; output in test-results/visual
 ```
 
 - **Which Chromium the tests use:** `$CHROMIUM` if set, otherwise the Flathub `org.chromium.Chromium`, otherwise Playwright's Chromium.
+- **Clean machine:** every profile, temp folder, browser process and compositor socket a test creates is removed when it exits, pass or fail.
 - **What the tests cover:**
   - The fit engine on a fixture page for each overflow pattern
-  - The dock and overlay with real CDP touch swipes, long-press and drag
+  - The toolbar popup (snapshots, restore) and the per-site switch
   - Session restore after a real `SIGKILL` of the browser, repeated crashes, and a graceful quit with *Continue where you left off*
   - CRX install from an update feed, then an auto-update to a newer signed build
 

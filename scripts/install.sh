@@ -2,11 +2,15 @@
 # RatMobile installer for Chromium-based browsers on Linux (native or Flatpak).
 #
 #   install.sh                 auto-updating install: registers RatMobile's update feed with every
-#                              Chromium/Chrome/Brave profile it finds. Restart the browser afterwards.
+#                              Chromium/Chrome/Brave profile it finds, and applies the tablet setup
+#                              below to browsers that are closed. Restart the browser afterwards.
+#   install.sh --tablet        only the tablet setup (browser must be closed): Chromium's own vertical
+#                              tabs on, collapsed to an icon strip, expand on hover, and
+#                              "On startup: Continue where you left off".
+#   install.sh --no-tablet     install without touching browser settings.
 #   install.sh --unpacked      for "Load unpacked" (Developer mode): keeps ~/.local/share/ratmobile/extension
 #                              current with an hourly systemd user timer; RatMobile reloads itself.
-#   install.sh --restore-on    also set "On startup: Continue where you left off" (browser must be closed).
-#   install.sh --uninstall     remove everything this script added.
+#   install.sh --uninstall     remove everything this script added (settings backups are kept).
 #
 # curl -fsSL https://dixonsolutions.github.io/RatMobile/install.sh | bash
 set -euo pipefail
@@ -17,14 +21,15 @@ DATA="${XDG_DATA_HOME:-$HOME/.local/share}/ratmobile"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 mode=feed
-restore=0
+tablet=auto
 for a in "$@"; do
   case "$a" in
     --unpacked) mode=unpacked ;;
     --update-unpacked) mode=update-unpacked ;;
-    --restore-on) restore=1 ;;
+    --tablet|--restore-on) [ "$mode" = feed ] && mode=none; tablet=1 ;;
+    --no-tablet) tablet=0 ;;
     --uninstall) mode=uninstall ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -118,14 +123,16 @@ EOF
   echo "    $DATA/extension"
 }
 
-set_restore_on() {
+# Tablet setup for Chromium's own vertical tabs. Chromium rewrites Preferences on exit, so this only
+# touches browsers that are closed; it keeps a backup and changes nothing else.
+tablet_setup() {
   local entry dir proc prefs
   while IFS= read -r entry; do
     dir="${entry%%|*}"; proc="${entry##*|}"
     prefs="$dir/Default/Preferences"
     [ -f "$prefs" ] || continue
     if running "$proc"; then
-      say "skipped startup setting for $dir: close the browser first (it rewrites its settings on exit)"
+      say "browser running: skipped tablet setup for $dir (close it, then run: install.sh --tablet)"
       continue
     fi
     cp "$prefs" "$prefs.ratmobile-backup"
@@ -133,10 +140,12 @@ set_restore_on() {
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
-d.setdefault("session", {})["restore_on_startup"] = 1
+vt = d.setdefault("vertical_tabs", {})
+vt.update({"enabled": True, "collapsed_state": True, "expand_on_hover": True})
+d.setdefault("session", {})["restore_on_startup"] = 1  # Continue where you left off
 json.dump(d, open(p, "w"), separators=(",", ":"))
 PY
-    say "'Continue where you left off' turned on for $dir (backup: Preferences.ratmobile-backup)"
+    say "tablet setup applied to $dir: vertical tabs collapsed + expand on hover, continue where you left off"
   done < <(browsers)
 }
 
@@ -151,10 +160,11 @@ uninstall() {
 }
 
 case "$mode" in
+  none) ;;
   feed) install_feed ;;
   unpacked) install_unpacked ;;
   update-unpacked) fetch_unpacked ;;
   uninstall) uninstall ;;
 esac
-[ "$restore" = 1 ] && set_restore_on
+if [ "$tablet" = 1 ] || { [ "$tablet" = auto ] && [ "$mode" = feed ]; }; then tablet_setup; fi
 exit 0

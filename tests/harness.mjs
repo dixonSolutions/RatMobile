@@ -1,7 +1,7 @@
 // Launches a real Chromium with RatMobile loaded and connects Playwright over CDP.
 // Chromium binary: $CHROMIUM, else the Flathub org.chromium.Chromium, else Playwright's Chromium.
 import { spawn, execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, rmdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -26,18 +26,38 @@ function command() {
   return [chromium.executablePath()];
 }
 
+// Everything tests create lives under one folder inside $HOME (so the flatpak sandbox can reach it)
+// and is removed when the test process exits, pass or fail: the machine stays clean.
+export const TEST_ROOT = join(homedir(), '.cache/ratmobile-test');
+const created = new Set();
+
 export function profileDir(name) {
-  // Inside $HOME so the flatpak sandbox can reach it.
-  const dir = join(homedir(), '.cache/ratmobile-test', name);
+  const dir = join(TEST_ROOT, name);
   mkdirSync(dir, { recursive: true });
+  created.add(dir);
   return dir;
 }
 
 export function freshProfile(name) {
-  const dir = join(homedir(), '.cache/ratmobile-test', name);
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(join(TEST_ROOT, name), { recursive: true, force: true });
   return profileDir(name);
 }
+
+export function trackDir(dir) {
+  created.add(dir);
+  return dir;
+}
+
+export function cleanupProfiles() {
+  for (const dir of created) {
+    try { execSync(`pkill -9 -f -- "--user-data-dir=${dir}"`, { stdio: 'ignore' }); } catch {}
+    rmSync(dir, { recursive: true, force: true });
+  }
+  created.clear();
+  try { rmdirSync(TEST_ROOT); } catch {} // only if nothing else is left in it
+}
+process.on('exit', cleanupProfiles);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { cleanupProfiles(); process.exit(130); });
 
 export async function launch({
   profile,

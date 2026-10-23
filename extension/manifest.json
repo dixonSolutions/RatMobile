@@ -3,7 +3,7 @@
   "name": "RatMobile",
   "short_name": "RatMobile",
   "version": "0.1.0",
-  "description": "Tablet-style Chromium: pages always fit the width (no horizontal scrolling), slide-over vertical tab dock with pinned tabs, crash-proof session snapshots.",
+  "description": "Tablet-style Chromium: pages always fit the width (no sideways scrolling), crash-proof session snapshots. Pairs with Chromium's own vertical tabs.",
   "homepage_url": "https://github.com/dixonSolutions/RatMobile",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuqakmoYDag9zCb+lTxqt8v0A7VR9Ln8hht3EApLMcG6viyNhXPkkUkX1bNA/mMNMBDiKMR3+sEOGDvS27THBMwiEvV2Ie3PeuhnbpUrpa7RnzVmudLXPds6cTcYfXV+zlU1+bEmmqdazp/oCKMaMD2pM3VBJ642Ib7+wMExPJdxMT/bEXqGsMzFB1bCTzzZGERynmPhhv+Z7+EMA6M7ZvR16jbntrDdinwmDZLjlG9SbMbanj9tp63r6K5dL8Ts782mOQVjmO53Unj2oQQbjiU5mhXMQcxivQqrRzZbNC6VASGSSNplpSQuJKyMWvKk9Y8HXT1AnA85WW1qXMNk7QQIDAQAB",
   "update_url": "https://dixonsolutions.github.io/RatMobile/updates.xml",
@@ -21,11 +21,8 @@
     "unlimitedStorage",
     "alarms",
     "sessions",
-    "sidePanel",
     "favicon",
     "scripting",
-    "search",
-    "topSites",
     "management"
   ],
   "host_permissions": [
@@ -46,25 +43,9 @@
       "run_at": "document_start"
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "ui/dock.html"
-      ],
-      "matches": [
-        "<all_urls>"
-      ],
-      "use_dynamic_url": true
-    }
-  ],
-  "chrome_url_overrides": {
-    "newtab": "ui/newtab.html"
-  },
-  "side_panel": {
-    "default_path": "ui/panel.html"
-  },
   "action": {
-    "default_title": "RatMobile tabs",
+    "default_title": "RatMobile",
+    "default_popup": "ui/popup.html",
     "default_icon": {
       "16": "icons/16.png",
       "32": "icons/32.png"
@@ -72,13 +53,10 @@
   },
   "options_page": "ui/options.html",
   "commands": {
-    "toggle-overlay": {
-      "suggested_key": {
-        "default": "Alt+Shift+A"
-      },
-      "description": "Open / close the tab overlay"
-    },
     "toggle-fit": {
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
       "description": "Toggle fit-to-width on this site"
     }
   }

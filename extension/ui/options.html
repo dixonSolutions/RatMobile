@@ -36,16 +36,19 @@
     <div class="opt"><div class="lbl">Zoom out wide web apps to fit<small>For apps with a fixed minimum width, like a phone shows desktop sites — pinch to zoom in. Your own zoom (Ctrl +/−) always wins.</small></div><input type="checkbox" data-k="fitZoom"></div>
     <div class="opt"><div class="lbl">Smallest zoom allowed</div>
       <select data-k="minZoom" data-num><option value="0.25">25%</option><option value="0.3">30% (like a phone)</option><option value="0.4">40%</option><option value="0.5">50%</option><option value="0.67">67%</option><option value="0.75">75%</option><option value="0.8">80%</option></select></div>
-    <div class="opt"><div class="lbl">Skip these sites<small>One host per line, e.g. <code>docs.google.com</code>. Fit and dock are off there.</small></div><textarea data-k="excludedHosts" data-list></textarea></div>
+    <div class="opt"><div class="lbl">Skip these sites<small>One host per line, e.g. <code>docs.google.com</code>. Fit to width is off there.</small></div><textarea data-k="excludedHosts" data-list></textarea></div>
   </section>
 
   <section>
-    <h2>Tab dock</h2>
-    <div class="opt"><div class="lbl">Dock mode<small>Swipe right from the dock (or tap ☰) for the full tab overlay.</small></div>
-      <select data-k="dockMode"><option value="reserve">Always visible, page moves over</option><option value="float">Always visible, floats over page</option><option value="autohide">Hide while scrolling down</option><option value="off">Off</option></select></div>
-    <div class="opt"><div class="lbl">Dock width</div><select data-k="dockWidth" data-num><option value="48">Compact (48px)</option><option value="56">Normal (56px)</option><option value="64">Large (64px)</option></select></div>
-    <div class="opt"><div class="lbl">Overlay width</div><select data-k="overlayWidth" data-num><option value="360">360px</option><option value="440">440px</option><option value="520">520px</option><option value="640">640px</option></select></div>
-    <div class="opt"><div class="lbl">Shortcut<small>Alt+Shift+A opens the overlay. Change it at <code>chrome://extensions/shortcuts</code>. If Chromium's own vertical tabs are on, switch them to the top (right-click the tab strip) so you don't have two tab lists.</small></div></div>
+    <h2>Tabs: Chromium's vertical tabs</h2>
+    <div class="opt"><div class="lbl">RatMobile uses Chromium's own vertical tab strip<small>
+      Recommended tablet setup:
+      <b>collapsed</b> to an icon strip that is always usable,
+      <b>expand on hover</b> so the full list slides over the page while you pick a tab,
+      and pinned tabs on top.
+      Right-click the tab strip to switch these, or run the installer with the browser closed:
+      <code>install.sh --tablet</code>.
+      Extensions can't change these settings directly.</small></div></div>
   </section>
 
   <section>

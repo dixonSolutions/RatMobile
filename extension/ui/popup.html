@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RatMobile</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { width: 380px; max-height: 580px; background: var(--panel); padding: 12px 14px 14px; overflow-y: auto; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  header img { width: 28px; height: 28px; }
+  header b { flex: 1; font-size: 16px; }
+  .site { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); }
+  .site .txt { flex: 1; min-width: 0; }
+  .site .host { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .site .state { font-size: 12px; color: var(--muted); }
+  input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; margin: 10px 0 2px; }
+</style>
+</head>
+<body>
+  <header><img src="../icons/48.png" alt=""><b>RatMobile</b><button class="icon-btn" id="settings" title="Settings"></button></header>
+  <div class="site"><div class="txt"><div class="host" id="host">This site</div><div class="state" id="state">Fit to width</div></div><input type="checkbox" id="fit" aria-label="Fit this site to the window width"></div>
+  <div class="row"><button class="pill" id="save"></button></div>
+  <div class="label" id="snapLabel"></div>
+  <div id="snaps"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -30,7 +30,6 @@ chrome.runtime.onStartup.addListener(() => boot());
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { settings } = await chrome.storage.local.get('settings');
   await chrome.storage.local.set({ settings: { ...DEFAULTS, ...(settings || {}) } });
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   chrome.alarms.create('snapshot', { periodInMinutes: 1 });
   chrome.alarms.create('update-check', { delayInMinutes: 2, periodInMinutes: 180 });
   await boot();
@@ -401,16 +400,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 chrome.commands.onCommand.addListener(async (command, tab) => {
   tab ??= (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
   if (!tab) return;
-  if (command === 'toggle-overlay') {
-    const ok = await chrome.tabs.sendMessage(tab.id, { type: 'overlay:toggle' }, { frameId: 0 }).then(() => true, () => false);
-    // Pages without our content script (chrome://, Web Store, PDF viewer): use the side panel.
-    if (!ok) chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
-  } else if (command === 'toggle-fit') {
+  if (command === 'toggle-fit') {
     const host = (() => { try { return new URL(tab.url).hostname; } catch { return ''; } })();
     if (!host) return;
     const s = await getSettings();
     const excludedHosts = s.excludedHosts.includes(host) ? s.excludedHosts.filter((h) => h !== host) : [...s.excludedHosts, host];
     await chrome.storage.local.set({ settings: { ...s, excludedHosts } });
+    chrome.tabs.reload(tab.id);
   }
 });
 

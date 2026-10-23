@@ -6,12 +6,14 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { launch, freshProfile, sleep, EXT_ID, ROOT } from './harness.mjs';
+import { launch, freshProfile, sleep, trackDir, EXT_ID, ROOT, TEST_ROOT } from './harness.mjs';
 import { serve } from './server.mjs';
 
 const hasKey = !!process.env.RATMOBILE_KEY || existsSync(process.env.RATMOBILE_KEY_FILE || join(homedir(), '.config/ratmobile/key.pem'));
-const base = join(homedir(), '.cache/ratmobile-test');
-const feed = join(base, 'feed');
+const base = TEST_ROOT;
+const feed = trackDir(join(base, 'feed'));
+trackDir(join(base, 'v1'));
+trackDir(join(base, 'v2'));
 let srv;
 
 function build(version, out) {
