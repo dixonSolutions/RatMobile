@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swipe</title>
+<style>
+  body { margin: 0; font: 16px/1.4 sans-serif; }
+  #edge { display: block; padding: 18px 0; background: #e8eefc; }
+  .row { height: 60px; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<a id="edge" href="#tapped">A full-width row link: tapping its very left edge must still open it</a>
+<div id="rows"></div>
+<script>
+  // What the page itself gets to see. Like a web app that binds Ctrl+Shift+L for itself (Google Docs:
+  // align left), it swallows the shortcut, which would stop Chromium from acting on it.
+  window.seen = { keys: [], touchmoves: 0 };
+  addEventListener('keydown', (e) => {
+    seen.keys.push(e.key);
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyL') e.preventDefault();
+  });
+  // Timing: when the finger had moved 24px sideways (RatMobile's trigger) and when the page got narrower/wider.
+  let x0 = 0;
+  addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; seen.trigger = seen.resized = null; }, { passive: true });
+  addEventListener('touchmove', (e) => {
+    seen.touchmoves++;
+    if (seen.trigger == null && Math.abs(e.touches[0].clientX - x0) >= 24) seen.trigger = performance.now();
+  }, { passive: true });
+  addEventListener('resize', () => { seen.resized ??= performance.now(); });
+  document.getElementById('rows').innerHTML = Array.from({ length: 80 }, (_, i) => `<div class="row">Row ${i + 1}</div>`).join('');
+</script>
+</body>
+</html>

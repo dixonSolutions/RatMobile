@@ -2,12 +2,17 @@
 # RatMobile installer for Chromium-based browsers on Linux (native or Flatpak).
 #
 #   install.sh                 auto-updating install: registers RatMobile's update feed with every
-#                              Chromium/Chrome/Brave profile it finds, and applies the tablet setup
-#                              below to browsers that are closed. Restart the browser afterwards.
+#                              Chromium/Chrome/Brave profile it finds, installs the swipe helper, and
+#                              applies the tablet setup below to browsers that are closed. Restart the
+#                              browser afterwards.
 #   install.sh --tablet        only the tablet setup (browser must be closed): Chromium's own vertical
 #                              tabs on, collapsed to an icon strip, expand on hover, and
 #                              "On startup: Continue where you left off".
 #   install.sh --no-tablet     install without touching browser settings.
+#   install.sh --helper        only (re)install the swipe helper: a tiny Python program that presses
+#                              Chromium's own Ctrl+Shift+L (expand/collapse the vertical tab strip)
+#                              when you swipe from the left edge of a page. Needs write access to
+#                              /dev/uinput, or a wlroots compositor (sway, Hyprland...).
 #   install.sh --unpacked      for "Load unpacked" (Developer mode): keeps ~/.local/share/ratmobile/extension
 #                              current with an hourly systemd user timer; RatMobile reloads itself.
 #   install.sh --uninstall     remove everything this script added (settings backups are kept).
@@ -16,6 +21,7 @@
 set -euo pipefail
 
 ID="jlddfageoecfjabhpdkjjbogcnafbdfa"
+HOST_NAME="com.dixonsolutions.ratmobile"
 SITE="https://dixonsolutions.github.io/RatMobile"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/ratmobile"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -28,8 +34,9 @@ for a in "$@"; do
     --update-unpacked) mode=update-unpacked ;;
     --tablet|--restore-on) [ "$mode" = feed ] && mode=none; tablet=1 ;;
     --no-tablet) tablet=0 ;;
+    --helper) mode=helper ;;
     --uninstall) mode=uninstall ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -89,6 +96,35 @@ fetch_unpacked() {
   mv "$DATA/extension.new" "$DATA/extension"
   rm -rf "$DATA/extension.old"
   say "RatMobile ${latest:-?} unpacked to $DATA/extension"
+}
+
+# The swipe helper and its native messaging manifest for every browser profile. Flatpak browsers run it
+# inside their sandbox, where ~/.local/share and /dev are visible and python3 is part of the runtime.
+install_helper() {
+  local here entry dir
+  mkdir -p "$DATA"
+  here="${BASH_SOURCE[0]:-}"
+  if [ -n "$here" ] && [ -f "$(dirname "$here")/ratmobile-host" ] && [ "$(cd "$(dirname "$here")" && pwd)" != "$DATA" ]; then
+    cp "$(dirname "$here")/ratmobile-host" "$DATA/ratmobile-host.new"
+  else
+    curl -fsSL "$SITE/ratmobile-host" -o "$DATA/ratmobile-host.new"
+  fi
+  chmod 755 "$DATA/ratmobile-host.new"
+  mv "$DATA/ratmobile-host.new" "$DATA/ratmobile-host"
+  while IFS= read -r entry; do
+    dir="${entry%%|*}/NativeMessagingHosts"
+    mkdir -p "$dir"
+    printf '{\n  "name": "%s",\n  "description": "RatMobile: presses Chromium'"'"'s own Ctrl+Shift+L to open and close the vertical tab strip when you swipe",\n  "path": "%s",\n  "type": "stdio",\n  "allowed_origins": ["chrome-extension://%s/"]\n}\n' \
+      "$HOST_NAME" "$DATA/ratmobile-host" "$ID" > "$dir/$HOST_NAME.json"
+  done < <(browsers)
+  say "swipe helper installed: $DATA/ratmobile-host"
+  if [ ! -w /dev/uinput ]; then
+    say "Swipe gestures: the helper presses keys through /dev/uinput, which you can't write to yet."
+    echo "    On sway or Hyprland they work anyway. Elsewhere, allow it for the logged-in user (note: any"
+    echo "    program you run can then send key presses), then log out and back in:"
+    echo "    echo 'KERNEL==\"uinput\", TAG+=\"uaccess\"' | sudo tee /etc/udev/rules.d/70-ratmobile-uinput.rules"
+  fi
+  say "Turn swipes on in the RatMobile toolbar popup (Swipe to open tabs) and allow the helper when asked."
 }
 
 install_unpacked() {
@@ -151,7 +187,7 @@ PY
 
 uninstall() {
   local entry
-  while IFS= read -r entry; do rm -f "${entry%%|*}/External Extensions/$ID.json"; done < <(browsers)
+  while IFS= read -r entry; do rm -f "${entry%%|*}/External Extensions/$ID.json" "${entry%%|*}/NativeMessagingHosts/$HOST_NAME.json"; done < <(browsers)
   systemctl --user disable --now ratmobile-update.timer >/dev/null 2>&1 || true
   rm -f "$UNIT_DIR/ratmobile-update.service" "$UNIT_DIR/ratmobile-update.timer"
   systemctl --user daemon-reload 2>/dev/null || true
@@ -161,9 +197,10 @@ uninstall() {
 
 case "$mode" in
   none) ;;
-  feed) install_feed ;;
-  unpacked) install_unpacked ;;
-  update-unpacked) fetch_unpacked ;;
+  feed) install_feed; install_helper ;;
+  unpacked) install_unpacked; install_helper ;;
+  update-unpacked) fetch_unpacked; install_helper >/dev/null ;;
+  helper) install_helper ;;
   uninstall) uninstall ;;
 esac
 if [ "$tablet" = 1 ] || { [ "$tablet" = auto ] && [ "$mode" = feed ]; }; then tablet_setup; fi

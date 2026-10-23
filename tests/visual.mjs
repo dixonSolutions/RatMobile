@@ -2,8 +2,9 @@
 // Before/after screenshots of the WHOLE browser window (Chromium's own vertical tabs included) at real
 // device resolutions, rendered off-screen in a headless Wayland compositor (cage + grim + wlr-randr).
 //
-//   node tests/visual.mjs                    # all devices, all pages
+//   node tests/visual.mjs                    # all devices, all pages, and the swipe demo
 //   DEVICES=tablet-portrait node tests/visual.mjs
+//   ONLY=swipe node tests/visual.mjs         # just the swipe demo (swipe-portrait.gif)
 //   OUT=dir node tests/visual.mjs            # default: test-results/visual
 //
 // Every device is rendered twice with identical profiles: Chromium alone, then Chromium + RatMobile.
@@ -12,7 +13,8 @@ import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
-import { ROOT, sleep, freshProfile, killProfile, cleanupProfiles } from './harness.mjs';
+import { ROOT, sleep, freshProfile, killProfile, cleanupProfiles, extensionWithHelper, registerHelper } from './harness.mjs';
+import { launchInCage, touchDrag, waitFor as waitUntil } from './cage.mjs';
 import { serve } from './server.mjs';
 
 const OUT = process.env.OUT || join(ROOT, 'test-results/visual');
@@ -197,16 +199,76 @@ function compose(results) {
   return made;
 }
 
+// Swipe demo on a real page: from the page's left edge, swipe right and Chromium's own tab strip opens;
+// swipe left and it closes. The helper presses Chromium's shortcut through the compositor's virtual keyboard.
+async function swipeDemo() {
+  const dev = ALL_DEVICES['tablet-portrait'];
+  const pinned = ['https://github.com/', 'https://en.wikipedia.org/wiki/Main_Page'];
+  const b = await launchInCage({
+    name: 'visual-swipe', device: dev, extensions: [extensionWithHelper()], env: { RATMOBILE_KEYS: 'wayland' }, seed: registerHelper,
+    prefs: { session: { restore_on_startup: 4, startup_urls: pinned }, pinned_tabs: pinned.map((url) => ({ url })) },
+  });
+  const frames = [];
+  try {
+    await waitUntil(async () => {
+      const sw = b.context.serviceWorkers().find((w) => w.url().includes('/background.js'));
+      return sw && (await sw.evaluate(async () => (await chrome.storage.local.get('swipe')).swipe?.state).catch(() => null)) === 'ready';
+    });
+    for (const url of ['https://slashdot.org/', 'https://en.wikipedia.org/wiki/Tablet_computer']) {
+      const p = await b.context.newPage();
+      await p.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(() => {});
+    }
+    await b.context.pages().find((p) => p.url() === 'about:blank')?.close();
+    const page = b.context.pages().at(-1);
+    await page.bringToFront();
+    await sleep(2500);
+    const cdp = await b.context.newCDPSession(page);
+    // Where the page starts on screen (tab strip on the left, toolbar on top), in DIP.
+    const origin = () => page.evaluate(() => [outerWidth - innerWidth, outerHeight - innerHeight]);
+    // Screen DIP -> pixels of the screenshot (grim's scale is relative to DIP).
+    const SCALE = 1.25;
+    const px = ([x, y]) => [Math.round(x * SCALE), Math.round(y * SCALE)];
+    const shot = async (name, caption, from, to) => {
+      const file = join(OUT, `swipe-${name}.png`);
+      b.screenshot(file, SCALE);
+      const [a, z] = [px(from), px(to || from)];
+      const draw = to ? ['-stroke', '#d9480f', '-strokewidth', '10', '-draw', `line ${a.join(',')} ${z.join(',')}`] : [];
+      draw.push('-stroke', 'none', '-fill', '#d9480fb0', '-draw', `circle ${z.join(',')} ${z[0] + 34},${z[1]}`);
+      execFileSync('magick', [file, ...draw, '-gravity', 'north', '-background', '#d9480f', '-fill', '#ffffff', '-font', FONT, '-pointsize', '34', '-splice', '0x70', '-annotate', '+0+16', caption, file]);
+      frames.push(file);
+    };
+    const y = 520; // page px
+    let [left, top] = await origin();
+    await shot('0', 'Touch the left edge of the page', [left + 8, top + y]);
+    await touchDrag(cdp, [8, y], [208, y], { steps: 12 });
+    await waitUntil(async () => (await origin())[0] > 120, 5000);
+    await sleep(700);
+    await shot('1', "Swipe right: Chromium's own tab list opens", [left + 8, top + y], [left + 208, top + y]);
+    [left, top] = await origin();
+    await touchDrag(cdp, [10, y], [-190, y], { steps: 12 });
+    await waitUntil(async () => (await origin())[0] < 120, 5000);
+    await sleep(700);
+    await shot('2', 'Swipe back: it closes again', [left + 10, top + y], [left - 190, top + y]);
+  } finally {
+    await b.close();
+  }
+  const out = join(OUT, 'swipe-portrait.gif');
+  execFileSync('magick', ['-delay', '130', '-loop', '0', ...frames, '-resize', '480x', '-layers', 'Optimize', out]);
+  console.log(`swipe demo: ${out}`);
+  return out;
+}
+
 mkdirSync(OUT, { recursive: true });
 if (!existsSync(join(ROOT, 'dist/ratmobile/manifest.json'))) execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: ROOT, stdio: 'inherit' });
 const server = await serve(join(ROOT, 'tests/fixtures'));
 const all = [];
 try {
-  for (const d of DEVICES) {
+  for (const d of process.env.ONLY === 'swipe' ? [] : DEVICES) {
     all.push(...(await run(d, false, server)));
     all.push(...(await run(d, true, server)));
     if (d === 'tablet-portrait') all.push(...(await run(d, true, server, { expanded: true })));
   }
+  await swipeDemo();
 } finally {
   server.close();
   cleanupProfiles();

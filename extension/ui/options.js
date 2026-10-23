@@ -1,4 +1,4 @@
-import { getSettings, setSettings } from '../lib/settings.js';
+import { getSettings, setSettings, setSwipeTabs, swipeStatusHtml } from '../lib/settings.js';
 
 const s = await getSettings();
 for (const el of document.querySelectorAll('[data-k]')) {
@@ -13,6 +13,16 @@ for (const el of document.querySelectorAll('[data-k]')) {
     setSettings({ [k]: v });
   });
 }
+
+// Tab strip swipes (needs a permission and the helper, so not a plain data-k setting).
+const swipeBox = document.getElementById('swipe');
+const showSwipe = (swipe) => {
+  document.getElementById('swipeState').innerHTML = swipeStatusHtml(swipe);
+  swipeBox.checked = !!swipe && swipe.state !== 'off' && swipe.state !== 'no-permission';
+};
+chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.swipe) showSwipe(c.swipe.newValue); });
+swipeBox.addEventListener('change', async () => { if (!(await setSwipeTabs(swipeBox.checked))) swipeBox.checked = false; });
+chrome.runtime.sendMessage({ type: 'swipe:status' }).then(showSwipe, () => showSwipe(null));
 
 document.getElementById('ver').textContent = chrome.runtime.getManifest().version;
 const self = await chrome.management.getSelf();

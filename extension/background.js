@@ -1,5 +1,5 @@
 // RatMobile service worker: session snapshots + crash restore, zoom broker for the fit engine,
-// commands, and self-updates.
+// the helper behind tab strip swipes, commands, and self-updates.
 import { DEFAULTS, getSettings } from './lib/settings.js';
 
 const SNAP_KEY = 'snap:current';
@@ -353,6 +353,91 @@ async function handleZoom(tabId, factor) {
 }
 
 // ---------------------------------------------------------------------------
+// Tab strip swipes
+//  Chromium has no extension API for its vertical tab strip, but its own shortcut Ctrl+Shift+L
+//  expands and collapses it. Content scripts recognise edge swipes; RatMobile's native helper
+//  (scripts/ratmobile-host, set up by install.sh) presses the shortcut. The helper's port stays open,
+//  which also keeps this service worker alive, so a swipe never waits for anything to start.
+//  storage.local "swipe" = { state: ready | off | no-permission | no-helper | error, sink?, error? }
+// ---------------------------------------------------------------------------
+const HELPER = 'com.dixonsolutions.ratmobile';
+let helper = null; // { port, ready: Promise<swipe state> }
+let helperRestarts = 0;
+let layoutCode = 'KeyL'; // the key that types "l", as last reported by a page
+
+async function setSwipe(state) {
+  const { swipe } = await chrome.storage.local.get('swipe');
+  if (JSON.stringify(swipe) !== JSON.stringify(state)) await chrome.storage.local.set({ swipe: state });
+  return state;
+}
+
+function disconnectHelper() {
+  const h = helper;
+  helper = null;
+  try { h?.port?.disconnect(); } catch {}
+}
+
+function connectHelper() {
+  if (helper) return helper.ready;
+  const h = (helper = {});
+  h.ready = (async () => {
+    const off = !(await getSettings()).swipeTabs ? 'off'
+      : !(await chrome.permissions.contains({ permissions: ['nativeMessaging'] })) ? 'no-permission' : null;
+    if (off) {
+      if (helper === h) helper = null;
+      return setSwipe({ state: off });
+    }
+    return new Promise((resolve) => {
+      let ready = false;
+      let port;
+      try {
+        port = h.port = chrome.runtime.connectNative(HELPER);
+      } catch (e) {
+        if (helper === h) helper = null;
+        resolve(setSwipe({ state: 'error', error: String(e.message || e) }));
+        return;
+      }
+      port.onMessage.addListener((m) => {
+        if (m.id === 'hello') {
+          ready = !!m.ok;
+          if (ready) helperRestarts = 0;
+          resolve(setSwipe(ready ? { state: 'ready', sink: m.sink } : { state: 'error', error: m.error }));
+        } else if (!m.ok) log('helper:', m.error);
+      });
+      port.onDisconnect.addListener(() => {
+        const error = chrome.runtime.lastError?.message || 'The helper stopped';
+        if (helper !== h) return; // we closed it on purpose
+        helper = null;
+        resolve(setSwipe({ state: /not found|forbidden/i.test(error) ? 'no-helper' : 'error', error }));
+        // A helper that worked and then went away (killed, crashed): start it again, a few times.
+        if (ready && helperRestarts++ < 3) setTimeout(connectHelper, 2000);
+      });
+      port.postMessage({ id: 'hello', cmd: 'hello' });
+    });
+  })();
+  return h.ready;
+}
+
+async function toggleTabStrip(code) {
+  if (/^Key[A-Z]$/.test(code || '')) layoutCode = code;
+  const state = await connectHelper();
+  if (state.state !== 'ready' || !helper?.port) return { ok: false, ...state };
+  helper.port.postMessage({ id: Date.now(), cmd: 'toggle', code: layoutCode });
+  return { ok: true };
+}
+
+function reconnectHelper() {
+  disconnectHelper();
+  helperRestarts = 0;
+  return connectHelper();
+}
+chrome.permissions.onAdded.addListener(reconnectHelper);
+chrome.permissions.onRemoved.addListener(reconnectHelper);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings && changes.settings.newValue?.swipeTabs !== changes.settings.oldValue?.swipeTabs) reconnectHelper();
+});
+
+// ---------------------------------------------------------------------------
 // Messages from content scripts and UI pages
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -382,6 +467,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     },
     'session:snapshot-now': async () => { await takeSnapshot(); return { ok: true }; },
     'update:check': () => checkForUpdates(true),
+    'swipe:toggle': () => toggleTabStrip(msg.code),
+    // The popup and settings ask on open: re-check anything not working yet (e.g. helper just installed).
+    'swipe:status': async () => {
+      const { swipe } = await chrome.storage.local.get('swipe');
+      return swipe?.state === 'ready' && helper ? swipe : reconnectHelper();
+    },
     'debug:state': async () => ({
       boot: await chrome.storage.session.get(null),
       current: (await chrome.storage.local.get(SNAP_KEY))[SNAP_KEY],
@@ -471,3 +562,4 @@ chrome.alarms.onAlarm.addListener(async (a) => {
 });
 
 boot();
+connectHelper();

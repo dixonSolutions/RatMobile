@@ -6,6 +6,7 @@
 
 - **Never scroll sideways.** Pages are made to fit the window width, whether in landscape, portrait or split screen.
 - **Chromium's own vertical tabs, set up for a tablet.** Collapsed to an icon strip you can always use, expanding over the page on hover to pick a tab, with pinned tabs on top. The installer configures this; RatMobile adds no tab UI of its own.
+- **Swipe to open the tabs.** From the left edge of a page, swipe right and the full tab list opens; swipe back and it closes. No reaching for the little expand button.
 - **Crash-proof sessions.** Windows, pinned tabs and tab groups are snapshotted continuously and restored after a crash, a `kill -9`, or a forced power-off.
 
 **Install page:** https://dixonsolutions.github.io/RatMobile/
@@ -14,11 +15,11 @@ Real Chromium 155, Surface Pro 9 in **portrait** (768 CSS px; the collapsed nati
 
 ![Before / after on Slashdot in portrait](docs/screenshots/compare-portrait.jpg)
 
-| Replay: the same sideways swipe | Native vertical tabs expanded |
+| Replay: the same sideways swipe | Swipe from the edge: Chromium's own tab list |
 |---|---|
-| ![Replay](docs/screenshots/replay-portrait.gif) | ![Native tabs open](docs/screenshots/native-tabs-open.jpg) |
+| ![Replay](docs/screenshots/replay-portrait.gif) | ![Swipe right from the left edge of the page to open Chromium's vertical tabs, swipe back to close them](docs/screenshots/swipe-portrait.gif) |
 
-More: [Wikipedia, Comparison of Linux distributions](docs/screenshots/compare-portrait-wikipedia.jpg) (scrolled 979 px sideways before). All captured with `node tests/visual.mjs`, which renders the whole browser window off-screen at the real device resolution.
+More: [Wikipedia, Comparison of Linux distributions](docs/screenshots/compare-portrait-wikipedia.jpg) (scrolled 979 px sideways before), [native vertical tabs expanded](docs/screenshots/native-tabs-open.jpg). All captured with `node tests/visual.mjs`, which renders the whole browser window off-screen at the real device resolution.
 
 
 ## Install
@@ -32,6 +33,7 @@ More: [Wikipedia, Comparison of Linux distributions](docs/screenshots/compare-po
 The installer finds Chromium, Google Chrome and Brave profiles, both native and Flatpak (`~/.var/app/...`). It registers RatMobile's update feed with each through Chromium's per-user `External Extensions` mechanism. Options:
 
 - **Tablet setup** (default for browsers that are closed; `--tablet` to run only that, `--no-tablet` to skip): Chromium's own vertical tabs on, **collapsed** to an icon strip, **expand on hover**, and *On startup → Continue where you left off*. A backup of the settings file is kept next to it.
+- **Swipe helper** (always; `--helper` to install only that): a small Python program that presses Chromium's own tab strip shortcut when you swipe (see [Swipe to open the tabs](#swipe-to-open-the-tabs)), registered as a native messaging host with each browser.
 - `--uninstall` removes everything the installer added.
 
 ### How updates work
@@ -79,7 +81,18 @@ RatMobile doesn't draw any tab UI. Chromium 146+ has native vertical tabs, and t
 | `vertical_tabs.expand_on_hover` | `true` | The full list slides over the page while you pick a tab, then collapses again |
 | `session.restore_on_startup` | `1` | Continue where you left off |
 
-You can change all of these yourself by right-clicking the tab strip. Extensions can't change them, which is why the installer does it while the browser is closed. On a touchscreen, tap the expand button at the top of the strip; hover only applies to mouse and pen.
+You can change all of these yourself by right-clicking the tab strip. Extensions can't change them, which is why the installer does it while the browser is closed. Hover only applies to mouse and pen; on a touchscreen, swipe (below) or tap the expand button at the top of the strip.
+
+### Swipe to open the tabs
+
+From the **left edge of the page** (the first 32 px next to the tab strip), **swipe right** and the tab strip expands to the full list. From the same edge, now next to the open list, **swipe left** and it collapses again. It goes the moment your finger has moved 24 px, while you are still swiping, and the strip slides open with Chromium's own animation.
+
+Chromium has no extension API to open or close its tab strip. Its own shortcut does it, though: **Ctrl+Shift+L**. So RatMobile's content script recognises the swipe and its **helper** presses that shortcut for you:
+
+- The helper (`~/.local/share/ratmobile/ratmobile-host`, installed by the installer) is a native messaging host: only RatMobile can talk to it, and the only keys it will ever press are Ctrl+Shift+*letter*. It needs write access to `/dev/uinput`, or a wlroots compositor (sway, Hyprland) whose virtual keyboard it uses instead. The installer checks, and if you can't write to `/dev/uinput` it prints the one-line udev rule that allows it for the logged-in user.
+- Turn it on in the toolbar popup (**Swipe to open tabs**), which asks Chromium for permission to talk to the helper. The popup and settings page show whether it works and why not.
+- Only a touch that starts at the edge and moves sideways is claimed. Scrolling and pinching from the edge, taps on links there, and Chromium's back/forward swipe anywhere else on the page work as before. RatMobile hides its own Ctrl+Shift+L from the page, so web apps that use that shortcut don't swallow it.
+- It works on web pages and local files. Chromium doesn't let extensions run on `chrome://` pages (like the New Tab page) or the Web Store: use the expand button there.
 
 The toolbar button opens a small popup with the per-site *fit to width* switch and the session snapshot history.
 
@@ -106,7 +119,7 @@ npm run lint
 npm test                    # real Chromium, headless, at 1440x960 / 960x1440 / 720x960 @2x
 HEADED=1 npm test           # watch it
 node tests/sites.mjs        # optional sweep over real websites
-node tests/visual.mjs       # before/after screenshots + replay GIFs of the whole browser window
+node tests/visual.mjs       # before/after screenshots, replay GIFs and the swipe demo of the whole browser window
                             # (native vertical tabs included) at real device resolutions, rendered
                             # off-screen with cage + grim; output in test-results/visual
 ```
@@ -118,6 +131,7 @@ node tests/visual.mjs       # before/after screenshots + replay GIFs of the whol
   - The toolbar popup (snapshots, restore) and the per-site switch
   - Session restore after a real `SIGKILL` of the browser, repeated crashes, and a graceful quit with *Continue where you left off*
   - CRX install from an update feed, then an auto-update to a newer signed build
+  - Tab strip swipes: the helper (it presses nothing but Ctrl+Shift+*letter*; on `/dev/uinput` checked with the device grabbed, so no key reaches the desktop), and real touch swipes in a real Chromium window with its native vertical tabs, off-screen in cage: open, close, no back navigation, scrolling and taps at the edge, back swipe elsewhere. That part is skipped where cage isn't installed (CI).
 
 Signing key: CI reads the `RATMOBILE_KEY` secret. Locally, the build reads `~/.config/ratmobile/key.pem`. Never commit it: whoever has the key can push updates to every install.
 

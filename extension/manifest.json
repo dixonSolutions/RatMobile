@@ -3,7 +3,7 @@
   "name": "RatMobile",
   "short_name": "RatMobile",
   "version": "0.1.0",
-  "description": "Tablet-style Chromium: pages always fit the width (no sideways scrolling), crash-proof session snapshots. Pairs with Chromium's own vertical tabs.",
+  "description": "Tablet-style Chromium: pages always fit the width, edge swipes open and close Chromium's own vertical tabs, crash-proof sessions.",
   "homepage_url": "https://github.com/dixonSolutions/RatMobile",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuqakmoYDag9zCb+lTxqt8v0A7VR9Ln8hht3EApLMcG6viyNhXPkkUkX1bNA/mMNMBDiKMR3+sEOGDvS27THBMwiEvV2Ie3PeuhnbpUrpa7RnzVmudLXPds6cTcYfXV+zlU1+bEmmqdazp/oCKMaMD2pM3VBJ642Ib7+wMExPJdxMT/bEXqGsMzFB1bCTzzZGERynmPhhv+Z7+EMA6M7ZvR16jbntrDdinwmDZLjlG9SbMbanj9tp63r6K5dL8Ts782mOQVjmO53Unj2oQQbjiU5mhXMQcxivQqrRzZbNC6VASGSSNplpSQuJKyMWvKk9Y8HXT1AnA85WW1qXMNk7QQIDAQAB",
   "update_url": "https://dixonsolutions.github.io/RatMobile/updates.xml",
@@ -24,6 +24,9 @@
     "favicon",
     "scripting",
     "management"
+  ],
+  "optional_permissions": [
+    "nativeMessaging"
   ],
   "host_permissions": [
     "<all_urls>"

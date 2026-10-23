@@ -1,5 +1,6 @@
-// RatMobile content script: the fit engine. Keeps every page from scrolling sideways.
-// Runs at document_start in the top frame of every page. Tabs live in Chromium's own vertical tab strip.
+// RatMobile content script: the fit engine, which keeps every page from scrolling sideways, and the
+// edge swipes that open and close Chromium's own vertical tab strip.
+// Runs at document_start in the top frame of every page.
 (() => {
   if (window.top !== window) return;
 
@@ -8,6 +9,7 @@
     fitZoom: true,
     minZoom: 0.3,
     excludedHosts: [],
+    swipeTabs: true,
   };
   const ATTR_FIX = 'data-rm-fix';
   const isExtensionPage = location.protocol === 'chrome-extension:';
@@ -313,12 +315,126 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
     }
     fit.lastWidth = w;
     scheduleFit(100);
+    updateSwipe();
   }
 
   // A clipped root still lets scripts (focus(), scrollIntoView) move the viewport sideways: snap back.
   on(window, 'scroll', () => {
     if (fit.clipped && window.scrollX !== 0) window.scrollTo({ left: 0, top: window.scrollY, behavior: 'instant' });
   }, { passive: true });
+
+  // ---------------------------------------------------------------------------
+  // Tab strip swipes: from the left edge of the page, swipe right to expand Chromium's vertical tab
+  // strip and swipe left to collapse it. Extensions can't drive the strip, so the background asks
+  // RatMobile's helper to press Chromium's own shortcut, Ctrl+Shift+L, the moment the finger has
+  // moved far enough. Only a touch that starts at the edge and moves sideways is claimed: scrolling,
+  // pinch and Chromium's back/forward swipe everywhere else on the page work as before.
+  // ---------------------------------------------------------------------------
+  const EDGE = 32; // DIP from the page's left edge where a swipe can start
+  const TRIGGER = 24; // DIP of sideways travel that opens or closes the strip
+  const EXPANDED = 120; // the page starts at least this far right of the window edge: the strip is open
+  const swipe = { ready: false, active: false, claiming: false, t: null, code: undefined, keyUntil: 0, lastToggle: 0 };
+
+  // How far right of the window's edge the page starts, i.e. the width of the tab strip beside it.
+  // On Wayland window.screenX is 0 and Touch.screenX is relative to the window.
+  const stripWidth = (t) => t.screenX - window.screenX - t.clientX * (fit.zoom || 1);
+
+  function onSwipeStart(e) {
+    swipe.t = null;
+    if (e.defaultPrevented || e.touches.length !== 1 || (window.visualViewport?.scale || 1) > 1.01) return;
+    const t = e.touches[0];
+    if (t.clientX * (fit.zoom || 1) > EDGE) return;
+    const strip = stripWidth(t);
+    if (strip < 24) return; // no vertical tab strip beside the page (horizontal tabs, fullscreen)
+    swipe.t = { x: t.clientX, y: t.clientY, ts: e.timeStamp, dir: strip >= EXPANDED ? -1 : 1, claimed: false, done: false };
+  }
+
+  // Travel towards opening (or, when the strip is open, closing) it, and sideways drift, in DIP.
+  function travel(s, t) {
+    const z = fit.zoom || 1;
+    return [(t.clientX - s.x) * z * s.dir, Math.abs(t.clientY - s.y) * z];
+  }
+
+  function onSwipeMove(e) {
+    const s = swipe.t;
+    if (!s) return;
+    if (e.touches.length !== 1) { swipe.t = null; return; }
+    const [dx, dy] = travel(s, e.touches[0]);
+    if (!s.claimed) {
+      if (dx < 4 && dy < 4) return;
+      // A scroll that happens to start at the edge, a swipe the other way, or a page handling the touch itself.
+      if (dx <= dy || e.defaultPrevented) { swipe.t = null; return; }
+      s.claimed = true;
+    }
+    if (!s.done && dx >= TRIGGER) { s.done = true; toggleStrip(); }
+  }
+
+  // Registered after onSwipeMove, so it sees this move's decision: no page scroll, no back/forward swipe.
+  function onSwipeClaim(e) {
+    if (swipe.t?.claimed && e.cancelable) e.preventDefault();
+  }
+
+  function onSwipeEnd(e) {
+    const s = swipe.t;
+    swipe.t = null;
+    // A quick flick can end before it has travelled TRIGGER.
+    if (s?.claimed && !s.done && e.changedTouches[0] && travel(s, e.changedTouches[0])[0] >= TRIGGER / 2 && e.timeStamp - s.ts < 250) toggleStrip();
+  }
+
+  function toggleStrip() {
+    const now = performance.now();
+    if (now - swipe.lastToggle < 400) return;
+    swipe.lastToggle = now;
+    swipe.keyUntil = now + 1000;
+    send({ type: 'swipe:toggle', code: swipe.code });
+  }
+
+  // The shortcut is for Chromium, not the page: web apps that bind Ctrl+Shift+L (and could swallow it)
+  // never see the one the helper presses.
+  function onSwipeKey(e) {
+    if (performance.now() > swipe.keyUntil) return;
+    if (e.key === 'Control' || e.key === 'Shift' || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l')) {
+      e.stopImmediatePropagation();
+      if (e.type === 'keyup' && e.key === 'Control') swipe.keyUntil = 0;
+    }
+  }
+
+  // Ctrl+Shift+L follows the keyboard layout: find the key that types "l" (Dvorak, Colemak...).
+  async function layoutCode() {
+    try {
+      const map = await navigator.keyboard?.getLayoutMap();
+      if (!map || map.get('KeyL') === 'l') return map ? 'KeyL' : undefined;
+      for (const [code, key] of map) if (key === 'l' && /^Key[A-Z]$/.test(code)) return code;
+    } catch {}
+    return undefined; // the background uses the last layout it heard about
+  }
+
+  const SWIPE_LISTENERS = [
+    ['touchstart', onSwipeStart, { passive: true }],
+    ['touchmove', onSwipeMove, { passive: true }],
+    ['touchend', onSwipeEnd, { passive: true }],
+    ['touchcancel', onSwipeEnd, { passive: true }],
+    ['keydown', onSwipeKey, true],
+    ['keyup', onSwipeKey, true],
+  ];
+
+  // A non-passive touch listener makes the browser wait for this page's main thread before it starts
+  // scrolling. So it is only added once the page has loaded, and only next to a vertical tab strip.
+  function updateSwipe() {
+    const active = alive && swipe.ready && settings.swipeTabs;
+    if (active !== swipe.active) {
+      swipe.active = active;
+      for (const [type, fn, opts] of SWIPE_LISTENERS) window[active ? 'addEventListener' : 'removeEventListener'](type, fn, opts);
+      if (active && swipe.code === undefined) layoutCode().then((c) => { swipe.code = c; });
+    }
+    const claiming = active && document.readyState === 'complete' && window.outerWidth - window.innerWidth * (fit.zoom || 1) >= 24;
+    if (claiming !== swipe.claiming) {
+      swipe.claiming = claiming;
+      window[claiming ? 'addEventListener' : 'removeEventListener']('touchmove', onSwipeClaim, { passive: false });
+    }
+    if (!active) swipe.t = null;
+  }
+  cleanups.push(() => { swipe.ready = false; updateSwipe(); });
 
   // ---------------------------------------------------------------------------
   // Wiring
@@ -340,6 +456,7 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
   function applySettings() {
     applyStyle();
     scheduleFit();
+    updateSwipe();
   }
 
   function teardown() {
@@ -355,8 +472,9 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
 
   async function init() {
     try {
-      const { settings: s } = await chrome.storage.local.get('settings');
+      const { settings: s, swipe: sw } = await chrome.storage.local.get(['settings', 'swipe']);
       settings = { ...DEFAULTS, ...(s || {}) };
+      swipe.ready = sw?.state === 'ready';
     } catch {
       return teardown();
     }
@@ -377,14 +495,16 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
       cleanups.push(() => wait.disconnect());
     }
     // Late stylesheets can widen the page without any DOM mutation.
-    on(window, 'load', () => scheduleFit(0), { once: true });
+    on(window, 'load', () => { scheduleFit(0); updateSwipe(); }, { once: true });
     on(document, 'load', (e) => { if (e.target instanceof HTMLLinkElement || e.target instanceof HTMLStyleElement) scheduleFit(100); }, true);
     on(window, 'resize', onResize);
   }
 
   if (extensionAlive()) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (!alive || area !== 'local' || !changes.settings) return;
+      if (!alive || area !== 'local') return;
+      if (changes.swipe) { swipe.ready = changes.swipe.newValue?.state === 'ready'; updateSwipe(); }
+      if (!changes.settings) return;
       settings = { ...DEFAULTS, ...(changes.settings.newValue || {}) };
       applySettings();
     });
@@ -397,7 +517,7 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
         reply({ overflow: overflowPx(), clipped: fit.clipped, zoom: fit.zoom, fixes: document.querySelectorAll(`[${ATTR_FIX}]`).length });
       }
     });
-    window.__ratmobile = { runFit, overflowPx, fit, get settings() { return settings; } };
+    window.__ratmobile = { runFit, overflowPx, fit, swipe, get settings() { return settings; } };
     init();
   }
 })();

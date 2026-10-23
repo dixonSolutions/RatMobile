@@ -1,5 +1,5 @@
 // Toolbar popup: per-site fit toggle and the session snapshot history.
-import { getSettings, setSettings, faviconUrl } from '../lib/settings.js';
+import { getSettings, setSettings, setSwipeTabs, swipeStatusHtml, faviconUrl } from '../lib/settings.js';
 import { icon } from '../lib/icons.js';
 
 const $ = (s) => document.getElementById(s);
@@ -38,6 +38,15 @@ $('fit').addEventListener('change', async () => {
   await setSettings({ excludedHosts });
   chrome.tabs.reload(tab.id);
 });
+
+// ---- Tab strip swipes ----
+const showSwipe = (swipe) => {
+  $('swipeState').innerHTML = swipeStatusHtml(swipe);
+  $('swipe').checked = !!swipe && swipe.state !== 'off' && swipe.state !== 'no-permission';
+};
+chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.swipe) showSwipe(c.swipe.newValue); });
+$('swipe').addEventListener('change', async () => { if (!(await setSwipeTabs($('swipe').checked))) $('swipe').checked = false; });
+chrome.runtime.sendMessage({ type: 'swipe:status' }).then(showSwipe, () => showSwipe(null));
 
 // ---- Snapshots ----
 async function render() {

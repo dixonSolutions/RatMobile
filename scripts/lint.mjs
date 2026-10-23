@@ -14,6 +14,11 @@ for (const f of [...walk(ext), ...walk(join(root, 'scripts')), ...walk(join(root
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); } catch (e) { errors.push(`${relative(root, f)}: ${e.stderr}`); }
 }
 
+// The swipe helper is Python (stdlib only, so it runs inside Flatpak browsers too).
+try {
+  execFileSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])', join(root, 'scripts/ratmobile-host')], { stdio: 'pipe' });
+} catch (e) { errors.push(`scripts/ratmobile-host: ${e.stderr || e.message}`); }
+
 const m = JSON.parse(readFileSync(join(ext, 'manifest.json'), 'utf8'));
 const refs = [
   m.background.service_worker, m.options_page, m.action.default_popup, m.side_panel?.default_path, m.chrome_url_overrides?.newtab,

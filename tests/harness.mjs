@@ -1,7 +1,7 @@
 // Launches a real Chromium with RatMobile loaded and connects Playwright over CDP.
 // Chromium binary: $CHROMIUM, else the Flathub org.chromium.Chromium, else Playwright's Chromium.
 import { spawn, execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, rmdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -149,6 +149,27 @@ export async function pageOverflow(page) {
     clientWidth: document.documentElement.clientWidth,
     innerWidth,
     canScrollX: (() => { const before = scrollX; scrollTo(99999, scrollY); const moved = scrollX; scrollTo(before, scrollY); return moved; })(),
+  }));
+}
+
+// RatMobile's swipe helper (scripts/ratmobile-host).
+export const HELPER = join(ROOT, 'scripts/ratmobile-host');
+
+// A copy of the build with nativeMessaging granted up front (it is optional and asked for in the popup),
+// and the helper registered in the profile (Chromium reads <user-data-dir>/NativeMessagingHosts).
+export function extensionWithHelper() {
+  const dir = trackDir(join(TEST_ROOT, 'swipe-ext'));
+  rmSync(dir, { recursive: true, force: true });
+  cpSync(join(ROOT, 'dist/ratmobile'), dir, { recursive: true });
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+  m.permissions.push('nativeMessaging');
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(m, null, 2));
+  return dir;
+}
+export function registerHelper(profile) {
+  mkdirSync(join(profile, 'NativeMessagingHosts'), { recursive: true });
+  writeFileSync(join(profile, 'NativeMessagingHosts', 'com.dixonsolutions.ratmobile.json'), JSON.stringify({
+    name: 'com.dixonsolutions.ratmobile', description: 'RatMobile swipe helper (test)', path: HELPER, type: 'stdio', allowed_origins: [`chrome-extension://${EXT_ID}/`],
   }));
 }
 

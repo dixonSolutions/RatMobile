@@ -9,6 +9,8 @@ export const DEFAULTS = {
   lazyRestore: true,
   historySize: 30,
   excludedHosts: [],
+  // Swipe from the left edge of a page to open/close Chromium's vertical tab strip (needs the helper).
+  swipeTabs: true,
 };
 
 export async function getSettings() {
@@ -20,6 +22,26 @@ export async function setSettings(patch) {
   const next = { ...(await getSettings()), ...patch };
   await chrome.storage.local.set({ settings: next });
   return next;
+}
+
+// Tab strip swipes need the optional nativeMessaging permission to reach RatMobile's helper.
+// Call from a click (the permission prompt needs a user gesture).
+export async function setSwipeTabs(on) {
+  if (on && !(await chrome.permissions.request({ permissions: ['nativeMessaging'] }).catch(() => false))) return false;
+  await setSettings({ swipeTabs: on });
+  return on;
+}
+
+const INSTALL = 'https://dixonsolutions.github.io/RatMobile/';
+export function swipeStatusHtml(swipe) {
+  switch (swipe?.state) {
+    case 'ready': return 'From the left edge of a page, swipe right to open the tab list and left to close it.';
+    case 'off': return 'Off.';
+    case 'no-permission': return 'Turn on, then allow RatMobile to talk to its helper.';
+    case 'no-helper': return `Needs RatMobile's small helper program: run the <a href="${INSTALL}" target="_blank" rel="noopener">installer</a> again, then reopen this.`;
+    case 'error': return `The helper can't press keys: ${String(swipe.error || '').replace(/[<>&]/g, '')}. See <a href="${INSTALL}" target="_blank" rel="noopener">install notes</a>.`;
+    default: return 'Checking…';
+  }
 }
 
 export function faviconUrl(pageUrl, size = 32) {

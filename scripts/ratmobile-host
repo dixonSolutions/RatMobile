@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""RatMobile helper: expands and collapses Chromium's own vertical tab strip for RatMobile's swipe gestures.
+
+Chromium gives extensions no way to open or close its tab strip, but its own shortcut, Ctrl+Shift+L,
+does. When you swipe from the left edge of a page, RatMobile asks this helper (over Chromium's native
+messaging) to press that shortcut. It never presses anything other than Ctrl+Shift+<letter>.
+
+Keys go through a virtual keyboard:
+  uinput    /dev/uinput, works on any desktop (GNOME, KDE, sway...) if you can write to it
+  wayland   the zwp_virtual_keyboard_v1 protocol, offered by wlroots compositors (sway, Hyprland, cage)
+RATMOBILE_KEYS=uinput|wayland forces one; RATMOBILE_KEYS=log:<file> only records what would be pressed.
+
+Messages (JSON, native messaging framing): {"id", "cmd": "hello"} and {"id", "cmd": "toggle", "code": "KeyL"}.
+Python 3 standard library only, so it also runs inside the Flatpak browsers' sandbox.
+"""
+import array
+import fcntl
+import json
+import os
+import socket
+import struct
+import sys
+import time
+
+VERSION = 1
+SHORTCUT = ('ctrl', 'shift')
+LETTERS = dict(zip('QWERTYUIOP', range(16, 26))) | dict(zip('ASDFGHJKL', range(30, 39))) | dict(zip('ZXCVBNM', range(44, 51)))
+KEY_LEFTCTRL, KEY_LEFTSHIFT = 29, 42
+MODS = {'ctrl': KEY_LEFTCTRL, 'shift': KEY_LEFTSHIFT}
+
+
+def evdev_codes(code):
+    """'KeyL' -> [29, 42, 38]. Only Ctrl+Shift+<letter> can ever be pressed."""
+    if not (isinstance(code, str) and len(code) == 4 and code.startswith('Key') and code[3] in LETTERS):
+        raise ValueError(f'not a letter key: {code!r}')
+    return [MODS[m] for m in SHORTCUT] + [LETTERS[code[3]]]
+
+
+class Uinput:
+    name = 'uinput'
+    UI_SET_EVBIT, UI_SET_KEYBIT, UI_DEV_SETUP, UI_DEV_CREATE = 0x40045564, 0x40045565, 0x405C5503, 0x5501
+    EV_SYN, EV_KEY = 0, 1
+
+    def __init__(self):
+        self.fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+        fcntl.ioctl(self.fd, self.UI_SET_EVBIT, self.EV_KEY)
+        for code in [*MODS.values(), *LETTERS.values()]:
+            fcntl.ioctl(self.fd, self.UI_SET_KEYBIT, code)
+        # struct uinput_setup: input_id {bustype=BUS_VIRTUAL, vendor, product, version}, name[80], ff_effects_max
+        fcntl.ioctl(self.fd, self.UI_DEV_SETUP, struct.pack('HHHH80sI', 0x06, 0x1209, 0x524D, VERSION, b'RatMobile tab strip keys', 0))
+        fcntl.ioctl(self.fd, self.UI_DEV_CREATE)
+        # The desktop needs a moment to pick up a new keyboard; keys sent before that are lost.
+        self.ready_at = time.monotonic() + 0.4
+
+    def _emit(self, code, value):
+        os.write(self.fd, struct.pack('llHHi', 0, 0, self.EV_KEY, code, value) + struct.pack('llHHi', 0, 0, self.EV_SYN, 0, 0))
+
+    def press(self, codes):
+        wait = self.ready_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        for c in codes:
+            self._emit(c, 1)
+            time.sleep(0.004)
+        for c in reversed(codes):
+            self._emit(c, 0)
+            time.sleep(0.004)
+
+
+class Wayland:
+    """Minimal Wayland client speaking just enough protocol for one virtual keyboard."""
+    name = 'wayland'
+    # A keymap of our own: the key presses below mean the same thing whatever layout the user has.
+    KEYMAP = b'''xkb_keymap {
+xkb_keycodes "ratmobile" { minimum = 8; maximum = 255; <LCTL> = 37; <LFSH> = 50; <AC09> = 46; };
+xkb_types "ratmobile" {
+  virtual_modifiers NumLock;
+  type "ONE_LEVEL" { modifiers = none; level_name[Level1] = "Any"; };
+  type "TWO_LEVEL" { modifiers = Shift; map[Shift] = Level2; level_name[Level1] = "Base"; level_name[Level2] = "Shift"; };
+  type "ALPHABETIC" { modifiers = Shift+Lock; map[Shift] = Level2; map[Lock] = Level2; level_name[Level1] = "Base"; level_name[Level2] = "Caps"; };
+};
+xkb_compatibility "ratmobile" {
+  interpret Shift_L { action = SetMods(modifiers=Shift); };
+  interpret Control_L { action = SetMods(modifiers=Control); };
+};
+xkb_symbols "ratmobile" {
+  key <LCTL> { [ Control_L ] };
+  key <LFSH> { [ Shift_L ] };
+  key <AC09> { type = "ALPHABETIC", [ l, L ] };
+  modifier_map Control { <LCTL> };
+  modifier_map Shift { <LFSH> };
+};
+};
+\0'''
+
+    def __init__(self):
+        display = os.environ.get('WAYLAND_DISPLAY') or 'wayland-0'
+        path = display if display.startswith('/') else os.path.join(os.environ['XDG_RUNTIME_DIR'], display)
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
+        self.sock.connect(path)
+        self.next_id, self.buf, self.t0 = 2, b'', time.monotonic()
+        self.registry = self._new()
+        self._send(1, 1, struct.pack('<I', self.registry))  # wl_display.get_registry
+        globs = {}
+        for obj, op, body in self._roundtrip():
+            if obj == self.registry and op == 0:  # wl_registry.global(name, interface, version)
+                name, n = struct.unpack('<II', body[:8])
+                globs[body[8:8 + n - 1].decode()] = name
+        if 'zwp_virtual_keyboard_manager_v1' not in globs or 'wl_seat' not in globs:
+            raise OSError('compositor has no virtual keyboard protocol')
+        seat = self._bind(globs['wl_seat'], 'wl_seat', 1)
+        manager = self._bind(globs['zwp_virtual_keyboard_manager_v1'], 'zwp_virtual_keyboard_manager_v1', 1)
+        self.kbd = self._new()
+        self._send(manager, 0, struct.pack('<II', seat, self.kbd))  # create_virtual_keyboard(seat, id)
+        fd = os.memfd_create('ratmobile-keymap', os.MFD_CLOEXEC)
+        os.write(fd, self.KEYMAP)
+        self._send(self.kbd, 0, struct.pack('<II', 1, len(self.KEYMAP)), fd)  # keymap(xkb_v1, fd, size)
+        os.close(fd)
+        self._roundtrip()
+
+    def _new(self):
+        self.next_id += 1
+        return self.next_id - 1
+
+    def _send(self, obj, op, payload=b'', fd=None):
+        msg = struct.pack('<II', obj, ((8 + len(payload)) << 16) | op) + payload
+        anc = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array('i', [fd]))] if fd is not None else []
+        self.sock.sendmsg([msg], anc)
+
+    def _bind(self, name, iface, version):
+        new = self._new()
+        s = iface.encode() + b'\0'
+        self._send(self.registry, 0, struct.pack('<II', name, len(s)) + s + b'\0' * (-len(s) % 4) + struct.pack('<II', version, new))
+        return new
+
+    def _roundtrip(self):
+        done = self._new()
+        self._send(1, 0, struct.pack('<I', done))  # wl_display.sync
+        events = []
+        while True:
+            while len(self.buf) >= 8:
+                obj, so = struct.unpack('<II', self.buf[:8])
+                if len(self.buf) < so >> 16:
+                    break
+                ev, self.buf = (obj, so & 0xFFFF, self.buf[8:so >> 16]), self.buf[so >> 16:]
+                if ev[0] == 1 and ev[1] == 0:  # wl_display.error
+                    raise OSError(f'wayland protocol error: {ev[2][12:].rstrip(bytes(1)).decode(errors="replace")}')
+                if ev[0] == done:
+                    return events
+                events.append(ev)
+            data = self.sock.recv(65536)
+            if not data:
+                raise OSError('compositor closed the connection')
+            self.buf += data
+
+    def press(self, codes):
+        # Our keymap only has Ctrl, Shift and the "l" key (evdev 38), whatever letter the layout would need.
+        ms = lambda: int((time.monotonic() - self.t0) * 1000) & 0xFFFFFFFF
+        mask = 0
+        for c in [KEY_LEFTCTRL, KEY_LEFTSHIFT, 38]:
+            self._send(self.kbd, 1, struct.pack('<III', ms(), c, 1))
+            mask |= {KEY_LEFTCTRL: 4, KEY_LEFTSHIFT: 1}.get(c, 0)
+            self._send(self.kbd, 2, struct.pack('<IIII', mask, 0, 0, 0))
+        for c in [38, KEY_LEFTSHIFT, KEY_LEFTCTRL]:
+            self._send(self.kbd, 1, struct.pack('<III', ms(), c, 0))
+            mask &= ~{KEY_LEFTCTRL: 4, KEY_LEFTSHIFT: 1}.get(c, 0)
+            self._send(self.kbd, 2, struct.pack('<IIII', mask, 0, 0, 0))
+        self._roundtrip()
+
+
+class Log:
+    name = 'log'
+
+    def __init__(self, path):
+        self.path = path
+
+    def press(self, codes):
+        with open(self.path, 'a') as f:
+            f.write(json.dumps({'t': time.time(), 'codes': codes}) + '\n')
+
+
+def open_sink():
+    want = os.environ.get('RATMOBILE_KEYS', '')
+    if want.startswith('log:'):
+        return Log(want[4:]), None
+    kinds = {'uinput': [Uinput], 'wayland': [Wayland]}.get(want, [Uinput, Wayland])
+    errors = []
+    for kind in kinds:
+        try:
+            return kind(), None
+        except Exception as e:  # noqa: BLE001 - report why each way failed
+            errors.append(f'{kind.name}: {e}')
+    return None, '; '.join(errors)
+
+
+def read_message():
+    head = sys.stdin.buffer.read(4)
+    if len(head) < 4:
+        return None
+    return json.loads(sys.stdin.buffer.read(struct.unpack('=I', head)[0]))
+
+
+def send(msg):
+    data = json.dumps(msg).encode()
+    sys.stdout.buffer.write(struct.pack('=I', len(data)) + data)
+    sys.stdout.buffer.flush()
+
+
+def main():
+    sink, error = open_sink()
+    while (msg := read_message()) is not None:
+        reply = {'id': msg.get('id'), 'version': VERSION}
+        try:
+            if msg.get('cmd') == 'hello':
+                reply |= {'ok': sink is not None, 'sink': sink and sink.name, 'error': error}
+            elif msg.get('cmd') == 'toggle':
+                codes = evdev_codes(msg.get('code') or 'KeyL')
+                if sink is None:
+                    raise OSError(error)
+                sink.press(codes)
+                reply |= {'ok': True}
+            else:
+                raise ValueError(f'unknown command: {msg.get("cmd")!r}')
+        except Exception as e:  # noqa: BLE001 - every failure goes back to the extension
+            reply |= {'ok': False, 'error': str(e)}
+        send(reply)
+
+
+if __name__ == '__main__':
+    main()

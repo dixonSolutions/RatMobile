@@ -14,12 +14,15 @@
   .site .host { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .site .state { font-size: 12px; color: var(--muted); }
   input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+  .site + .site { margin-top: 8px; }
+  .site .state a { color: var(--accent); }
   .row { display: flex; gap: 8px; margin: 10px 0 2px; }
 </style>
 </head>
 <body>
   <header><img src="../icons/48.png" alt=""><b>RatMobile</b><button class="icon-btn" id="settings" title="Settings"></button></header>
   <div class="site"><div class="txt"><div class="host" id="host">This site</div><div class="state" id="state">Fit to width</div></div><input type="checkbox" id="fit" aria-label="Fit this site to the window width"></div>
+  <div class="site"><div class="txt"><div class="host">Swipe to open tabs</div><div class="state" id="swipeState"></div></div><input type="checkbox" id="swipe" aria-label="Swipe from the left edge of a page to open and close the tab strip"></div>
   <div class="row"><button class="pill" id="save"></button></div>
   <div class="label" id="snapLabel"></div>
   <div id="snaps"></div>
