@@ -111,6 +111,16 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
     return de.scrollWidth - de.clientWidth;
   }
 
+  // The page's own CSS may already stop the viewport from scrolling sideways (overflow-x on
+  // html, or on body when html is visible, propagates to the viewport). Then there is nothing to fix.
+  function siteClipsViewportX() {
+    const de = document.documentElement;
+    const hx = getComputedStyle(de).overflowX;
+    if (hx !== 'visible') return !fit.clipped && hx !== 'auto' && hx !== 'scroll';
+    const bx = document.body ? getComputedStyle(document.body).overflowX : 'visible';
+    return bx === 'hidden' || bx === 'clip';
+  }
+
   function addFix(el, kind) {
     const cur = el.getAttribute(ATTR_FIX) || '';
     if (cur.split(' ').includes(kind)) return false;
@@ -214,6 +224,7 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
     const vw = document.documentElement.clientWidth;
     let over = overflowPx();
     if (over <= 1) return;
+    if (siteClipsViewportX()) return;
     // Measure without our own clip so we see the real overflow.
     if (fit.clipped) {
       setClip(false);

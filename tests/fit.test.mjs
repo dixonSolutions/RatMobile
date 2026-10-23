@@ -68,6 +68,12 @@ for (const [w, h] of SIZES) {
       assert.equal(await zoomOf(b.context, url), 1);
     });
 
+    test('page that already hides sideways overflow is left alone', async () => {
+      const url = await open('site-clipped.html');
+      assert.equal(await page.evaluate(() => document.querySelectorAll('[data-rm-fix]').length), 0);
+      assert.equal(await zoomOf(b.context, url), 1);
+    });
+
     for (const name of ['wide-image.html', 'long-word.html', 'pre-code.html', 'wide-table.html', 'vw.html', 'flex-row.html', 'sticky.html']) {
       test(`${name}: reflowed, no sideways scroll, no zoom`, async () => {
         const url = await open(name);
