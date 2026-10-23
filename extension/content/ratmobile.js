@@ -50,7 +50,7 @@
     const d = dockActive() && settings.dockMode === 'reserve' ? settings.dockWidth : 0;
     return `
 html{--rm-dock:${d}px}
-${d ? `html{margin-left:${d}px!important;width:auto!important;}` : ''}
+${d ? `html{margin-left:${d}px!important;width:auto!important;position:relative!important}` : ''}
 html[data-rm-clip]{overflow-x:clip!important}
 html[data-rm-clip] > body{overflow-x:clip!important}
 [${ATTR_FIX}~=media]{max-width:100%!important}
@@ -63,6 +63,7 @@ img[${ATTR_FIX}~=media],video[${ATTR_FIX}~=media],canvas[${ATTR_FIX}~=media]{hei
 [${ATTR_FIX}~=box]{max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
 [${ATTR_FIX}~=wrap]{flex-wrap:wrap!important}
 [${ATTR_FIX}~=box2]{width:auto!important;flex-shrink:1!important}
+[${ATTR_FIX}~=bleed]{margin-left:0!important;margin-right:0!important}
 [${ATTR_FIX}~=vw]{max-width:calc(100vw - var(--rm-dock) - 16px)!important}
 #ratmobile-dock{all:initial!important;position:fixed!important;left:0!important;top:0!important;bottom:0!important;height:100%!important;
   width:var(--rm-frame-w,${settings.dockWidth}px)!important;border:0!important;margin:0!important;padding:0!important;
@@ -85,6 +86,8 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
     zoom: 1, // current browser zoom (as told by background)
     baseZoom: null, // zoom before we started fitting
     zoomSteps: 0,
+    restores: 0,
+    zoomCulprits: [],
     userZoomed: false,
     clipped: false,
     passes: 0,
@@ -105,10 +108,13 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
     return !!m && /width\s*=\s*device-width/i.test(m.content || '');
   }
 
+  // In quirks mode the body, not <html>, is the viewport's scrolling element.
+  const scroller = () => document.scrollingElement || document.documentElement;
+
   function overflowPx() {
-    const de = document.documentElement;
-    if (!de) return 0;
-    return de.scrollWidth - de.clientWidth;
+    const se = scroller();
+    if (!se) return 0;
+    return se.scrollWidth - se.clientWidth;
   }
 
   // The page's own CSS may already stop the viewport from scrolling sideways (overflow-x on
@@ -150,10 +156,25 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       if (!over && el.childElementCount === 0 && r.width > 0 && el.scrollWidth > el.clientWidth + 1 && r.left + sx + el.scrollWidth > limit) {
         if (cs.overflowX === 'visible') out.push({ el, r: { left: r.left + sx, right: r.left + sx + el.scrollWidth, width: r.width }, cs, text: true });
       }
-      if (cs.overflowX !== 'visible' || MEDIA.has(el.tagName.toUpperCase())) continue;
+      if ((cs.overflowX !== 'visible' && el !== document.body) || MEDIA.has(el.tagName.toUpperCase())) continue;
       for (let i = el.children.length - 1; i >= 0; i--) stack.push([el.children[i], parentOver || over]);
     }
     return out;
+  }
+
+  function isNearFull(r, vw) {
+    return r.width >= vw * 0.85 && r.right <= vw + settings.dockWidth + 24;
+  }
+
+  // Wrapping cell text can crush data tables to a character per column: scroll those instead.
+  function tableCrushed(table) {
+    const em = parseFloat(getComputedStyle(table).fontSize) || 16;
+    for (const row of [...table.rows].slice(0, 6)) {
+      for (const cell of row.cells) {
+        if (cell.clientWidth < em * 3 && (cell.textContent || '').trim().length >= 4) return true;
+      }
+    }
+    return false;
   }
 
   function fixCulprit({ el, r, cs, text }, vw, responsive, pass) {
@@ -165,12 +186,15 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       if (PRE.has(tag)) return addFix(el, 'pre') ? 'pre' : null;
     }
     if (tag === 'TABLE') {
-      if (addFix(el, 'table')) return 'table';
+      if (addFix(el, 'table')) {
+        if (tableCrushed(el)) { el.setAttribute(ATTR_FIX, 'scrollbox'); return 'scrollbox'; }
+        return 'table';
+      }
       return addFix(el, 'scrollbox') ? 'scrollbox' : null;
     }
     // Full-bleed element just slightly too wide (100vw + scrollbar / dock): always safe to clamp.
-    const nearFull = r.width >= vw * 0.85 && r.right <= vw + settings.dockWidth + 24;
-    if (nearFull) {
+    if (isNearFull(r, vw)) {
+      if (parseFloat(cs.marginLeft) < 0 && addFix(el, 'bleed')) return 'bleed';
       if (addFix(el, 'box')) return 'box';
       if (addFix(el, 'vw')) return 'vw';
     }
@@ -221,10 +245,32 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
     if (!settings.fitEnabled || siteExcluded()) { setClip(false); return; }
     if (document.fullscreenElement) return;
 
-    const vw = document.documentElement.clientWidth;
+    const vw = scroller().clientWidth;
     let over = overflowPx();
+    if (over <= 1 && fit.baseZoom == null) return;
+    // A temporary overflow (ad, toast) that made us zoom out is gone: go back to the user's zoom.
+    if (fit.baseZoom != null && fit.zoom < fit.baseZoom && fit.restores < 3) {
+      const atBase = (vw * fit.zoom) / fit.baseZoom;
+      const sx = window.scrollX;
+      const gone = fit.zoomCulprits.every((ref) => {
+        const el = ref.deref();
+        return !el || !el.isConnected || el.getBoundingClientRect().right + sx <= atBase + 1;
+      });
+      if (gone) {
+        const base = fit.baseZoom;
+        fit.baseZoom = null;
+        fit.zoomSteps = 0;
+        fit.zoomCulprits = [];
+        fit.restores++;
+        log('zoom restore', base);
+        requestZoom(base);
+        return;
+      }
+    }
     if (over <= 1) return;
-    if (siteClipsViewportX()) return;
+    // The site already stops the viewport scrolling sideways. Only undo what our own dock shift
+    // pushed out (full-bleed bars); never zoom or reflow content the site deliberately clips.
+    const siteClips = siteClipsViewportX();
     // Measure without our own clip so we see the real overflow.
     if (fit.clipped) {
       setClip(false);
@@ -238,16 +284,17 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       if (!culprits.length) { offscreenOnly = false; break; }
       let changed = 0;
       for (const c of culprits.slice(0, 300)) {
+        if (siteClips && !(reserving() && isNearFull(c.r, vw))) continue;
         // An earlier fix in this pass (e.g. wrapping its row) may already have pulled it back in.
         if (changed && !c.text && c.el.getBoundingClientRect().right + window.scrollX <= vw + 1) continue;
-        const kind = fixCulprit(c, vw, responsive, pass);
+        const kind = fixCulprit(c, vw, responsive && !siteClips, pass);
         if (kind !== 'offscreen') offscreenOnly = false;
         if (kind && kind !== 'offscreen') { changed++; log('fix', kind, c.el); }
       }
       if (!changed) break;
       over = overflowPx();
     }
-    if (over <= 1) return;
+    if (over <= 1 || siteClips) return;
 
     const ratio = (vw + over) / vw;
     // Off-canvas menus etc. sitting fully outside the viewport, or a tiny residue: just clip.
@@ -261,6 +308,8 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       const target = Math.max(settings.minZoom, Math.floor((fit.zoom / ratio) * 100) / 100);
       if (target < fit.zoom - 0.005) {
         fit.zoomSteps++;
+        // Remember what forced the zoom-out, so we can zoom back in when it goes away.
+        fit.zoomCulprits = [...fit.zoomCulprits.filter((r) => r.deref()?.isConnected), ...findCulprits(vw).map((c) => new WeakRef(c.el))];
         log('zoom', fit.zoom, '->', target, 'ratio', ratio);
         if (await requestZoom(target)) return; // resize triggers another pass
       }
@@ -276,6 +325,7 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       const base = fit.baseZoom;
       fit.baseZoom = null;
       fit.zoomSteps = 0;
+      fit.zoomCulprits = [];
       requestZoom(base);
     }
     fit.lastWidth = w;
@@ -285,41 +335,61 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
   // ---------------------------------------------------------------------------
   // Reserve-space dock: shift fixed elements that would sit underneath it.
   // ---------------------------------------------------------------------------
-  const shifted = new Map(); // el -> original inline values
+  const shifted = new Map(); // el -> { original inline values, values we set }
 
   function shiftFixed(el) {
     if (!(el instanceof HTMLElement) || el.id === 'ratmobile-dock' || el.id === 'ratmobile-edge') return;
     const D = settings.dockWidth;
-    const cs = getComputedStyle(el);
-    if (cs.position !== 'fixed') {
-      if (shifted.has(el) && !el.isConnected) shifted.delete(el);
-      return;
+    const prev = shifted.get(el);
+    // Sites that rewrite style.left (sticky headers, menus) undo our shift: notice and redo it.
+    if (prev) {
+      if (!el.isConnected) { shifted.delete(el); return; }
+      const leftOk = !prev.setLeft || el.style.getPropertyValue('left') === prev.setLeft;
+      const mwOk = !prev.setMax || el.style.getPropertyValue('max-width') === prev.setMax;
+      if (leftOk && mwOk) return;
+      restore(el, prev);
+      shifted.delete(el);
     }
-    if (shifted.has(el)) return;
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'fixed') return;
     const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.right <= 0 || r.left >= D - 0.5) return;
-    const orig = {
+    if (r.width === 0 || r.right <= 0) return;
+    const vw = window.innerWidth;
+    const entry = {
       left: el.style.getPropertyValue('left'), leftP: el.style.getPropertyPriority('left'),
       maxWidth: el.style.getPropertyValue('max-width'), maxWidthP: el.style.getPropertyPriority('max-width'),
+      setLeft: null, setMax: null,
     };
-    if (cs.left !== 'auto') {
-      el.style.setProperty('left', `${parseFloat(cs.left) + D}px`, 'important');
-    } else if (cs.right === 'auto') {
-      return; // static position: already inside the shifted root
+    let left = r.left;
+    if (r.left < D - 0.5) {
+      if (cs.left !== 'auto') {
+        entry.setLeft = `${parseFloat(cs.left) + (D - r.left)}px`;
+        el.style.setProperty('left', entry.setLeft, 'important');
+        left = D;
+      } else if (cs.right === 'auto') {
+        return; // static position: already inside the shifted root
+      }
     }
-    if (r.width > window.innerWidth - D - 1) el.style.setProperty('max-width', `calc(100% - ${D}px)`, 'important');
+    // Full-width bars (width:100% / 100vw) now stick out on the right: clamp them.
+    if (left + r.width > vw + 0.5 && r.width > vw * 0.5) {
+      entry.setMax = `calc(100% - ${Math.round(left)}px)`;
+      el.style.setProperty('max-width', entry.setMax, 'important');
+    }
+    if (!entry.setLeft && !entry.setMax) return;
     el.setAttribute(ATTR_SHIFT, '');
-    shifted.set(el, orig);
+    shifted.set(el, entry);
+  }
+
+  function restore(el, o) {
+    el.style.removeProperty('left');
+    el.style.removeProperty('max-width');
+    if (o.left) el.style.setProperty('left', o.left, o.leftP);
+    if (o.maxWidth) el.style.setProperty('max-width', o.maxWidth, o.maxWidthP);
+    el.removeAttribute(ATTR_SHIFT);
   }
 
   function unshiftAll() {
-    for (const [el, o] of shifted) {
-      el.style.removeProperty('left');
-      el.style.removeProperty('max-width');
-      if (o.left) el.style.setProperty('left', o.left, o.leftP);
-      if (o.maxWidth) el.style.setProperty('max-width', o.maxWidth, o.maxWidthP);
-      el.removeAttribute(ATTR_SHIFT);
-    }
+    for (const [el, o] of shifted) restore(el, o);
     shifted.clear();
   }
 
@@ -435,7 +505,7 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
         if (rec.attributeName === ATTR_FIX || rec.attributeName === ATTR_SHIFT || t === frame) continue;
         if (rec.attributeName === 'data-rm-clip' || rec.attributeName === 'data-rm-fullscreen') continue;
         fitDirty = true;
-        if (reserving() && t.nodeType === 1 && !shifted.has(t)) shiftFixed(t);
+        if (reserving() && t.nodeType === 1) shiftFixed(t);
       }
     }
     if (fitDirty) scheduleFit(300);
@@ -480,10 +550,21 @@ html[data-rm-fullscreen] #ratmobile-dock{display:none!important}
       mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open', 'width'] });
       new ResizeObserver(() => scheduleFit(150)).observe(document.documentElement);
     };
+    // Start as soon as <body> exists (well before DOMContentLoaded on big pages), so the dock
+    // never leaves an empty strip while the page parses.
     if (document.body) start();
-    else on(document, 'DOMContentLoaded', start, { once: true });
-    on(window, 'load', () => scheduleFit(0), { once: true });
+    else {
+      const wait = new MutationObserver(() => { if (document.body) { wait.disconnect(); start(); } });
+      wait.observe(document.documentElement, { childList: true });
+      cleanups.push(() => wait.disconnect());
+    }
+    // Stylesheets that arrive late can turn elements fixed without any DOM mutation.
+    let rescanTimer = 0;
+    const rescan = () => { clearTimeout(rescanTimer); rescanTimer = setTimeout(() => { if (alive && reserving()) scanFixed(); scheduleFit(0); }, 120); };
+    on(window, 'load', rescan, { once: true });
+    on(document, 'load', (e) => { if (e.target instanceof HTMLLinkElement || e.target instanceof HTMLStyleElement) rescan(); }, true);
     on(window, 'resize', onResize);
+    on(window, 'resize', rescan);
   }
 
   if (extensionAlive()) {

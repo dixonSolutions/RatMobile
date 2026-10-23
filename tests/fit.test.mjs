@@ -142,6 +142,65 @@ for (const [w, h] of SIZES) {
       assert.equal(await canScrollX(page), 0);
     });
 
+    test('quirks-mode page is reflowed, not zoomed', async () => {
+      const url = await open('quirks-table.html');
+      assert.equal(await canScrollX(page), 0);
+      assert.equal(await zoomOf(b.context, url), 1);
+    });
+
+    test('data table is not crushed: it scrolls inside itself instead', async () => {
+      const url = await open('data-table.html');
+      assert.equal(await canScrollX(page), 0);
+      assert.equal(await zoomOf(b.context, url), 1);
+      const minCell = await page.evaluate(() => Math.min(...[...document.querySelectorAll('#t td')].map((c) => c.clientWidth)));
+      assert.ok(minCell >= 40, `cells crushed to ${minCell}px`);
+    });
+
+    test('absolutely positioned app root is not hidden under the dock', async () => {
+      await open('abs-left.html');
+      assert.ok((await page.evaluate(() => document.getElementById('app').getBoundingClientRect().left)) >= 56);
+    });
+
+    test('fixed bar whose left the site rewrites gets shifted again, and stays inside the window', async () => {
+      await open('fixed-rewrite.html');
+      await page.waitForFunction(() => document.title === 'rewritten');
+      await sleep(300);
+      const r = await page.evaluate(() => { const b = document.getElementById('bar').getBoundingClientRect(); return { left: b.left, right: b.right, iw: innerWidth }; });
+      assert.ok(r.left >= 56, `bar at ${r.left}`);
+      assert.ok(r.right <= r.iw + 1, `bar sticks out: ${r.right} > ${r.iw}`);
+    });
+
+    test('element made fixed by a late stylesheet is shifted', async () => {
+      await open('late-css.html');
+      await page.waitForFunction(() => document.title === 'late');
+      await sleep(500);
+      assert.ok((await page.evaluate(() => document.getElementById('menu').getBoundingClientRect().left)) >= 56);
+    });
+
+    test('full-bleed (100vw, negative margin) block stays out from under the dock', async () => {
+      await open('bleed.html');
+      assert.equal(await canScrollX(page), 0);
+      const r = await page.evaluate(() => document.getElementById('bleed').getBoundingClientRect());
+      assert.ok(r.left >= 55, `bleed starts at ${r.left}`);
+    });
+
+    test('site that hides overflow: our shift does not push its header items off-screen', async () => {
+      const url = await open('body-hidden-vw.html');
+      const r = await page.evaluate(() => ({ right: document.getElementById('rightitem').getBoundingClientRect().right, iw: document.documentElement.clientWidth + 56 }));
+      assert.ok(r.right <= r.iw + 1, `header item cut off: ${r.right} > ${r.iw}`);
+      assert.equal(await zoomOf(b.context, url), 1);
+    });
+
+    test('zoom goes back up when a temporary overflow disappears', async () => {
+      const url = await open('temp-overflow.html');
+      await settle(page, 600);
+      assert.ok((await zoomOf(b.context, url)) < 1, 'zoomed out for the wide ad');
+      await page.waitForFunction(() => document.title === 'ad gone');
+      await sleep(1500);
+      await settle(page);
+      assert.equal(await zoomOf(b.context, url), 1);
+    });
+
     test('user zoom wins over auto-fit', async () => {
       const url = await open('min-width-app.html');
       await settle(page, 1200);

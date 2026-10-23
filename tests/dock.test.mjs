@@ -185,6 +185,39 @@ describe('dock', () => {
     await page.keyboard.press('Escape');
   });
 
+  test('dock modes apply live: float, autohide, off, back to reserve', async () => {
+    if (await isOpen()) await page.keyboard.press('Escape');
+    for (let i = 0; i < 40 && Math.round(await frameWidth()) !== 56; i++) await sleep(50);
+    assert.equal(Math.round(await frameWidth()), 56, 'overlay should be closed before switching modes');
+    const set = (patch) => swEval(b.context, async (p) => {
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({ settings: { ...settings, ...p } });
+    }, patch);
+    const state = () => page.evaluate(() => ({ ml: getComputedStyle(document.documentElement).marginLeft, dock: !!document.getElementById('ratmobile-dock'), edge: !!document.getElementById('ratmobile-edge') }));
+    await set({ dockMode: 'float' });
+    await sleep(300);
+    assert.deepEqual(await state(), { ml: '0px', dock: true, edge: false });
+    await set({ dockMode: 'autohide' });
+    await sleep(300);
+    assert.deepEqual(await state(), { ml: '0px', dock: true, edge: true });
+    await page.evaluate(() => { document.body.style.height = '5000px'; scrollTo(0, 0); });
+    await page.mouse.wheel(0, 600);
+    await sleep(500);
+    const x = await page.evaluate(() => document.getElementById('ratmobile-dock').getBoundingClientRect().right);
+    assert.ok(x <= 1, `dock should slide away while scrolling down (right=${x})`);
+    await page.mouse.wheel(0, -300);
+    await sleep(500);
+    assert.equal(Math.round(await page.evaluate(() => document.getElementById('ratmobile-dock').getBoundingClientRect().right)), 56);
+    await set({ dockMode: 'off' });
+    await sleep(300);
+    assert.deepEqual(await state(), { ml: '0px', dock: false, edge: false });
+    await set({ dockMode: 'reserve' });
+    await sleep(300);
+    assert.deepEqual(await state(), { ml: '56px', dock: true, edge: false });
+    // Fixed header is shifted again after switching back.
+    assert.ok((await page.evaluate(() => document.getElementById('burger').getBoundingClientRect().left)) >= 56);
+  });
+
   test('new tab page has the dock too', async () => {
     const p = await b.context.newPage();
     await p.goto('chrome://newtab/');
