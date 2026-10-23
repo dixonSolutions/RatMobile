@@ -10,6 +10,12 @@
 
 **Install page:** https://dixonsolutions.github.io/RatMobile/
 
+| Icon dock (always usable) | Swipe right → slide-over tab overlay |
+|---|---|
+| ![Dock](docs/screenshots/dock.jpg) | ![Overlay](docs/screenshots/overlay.jpg) |
+
+<sub>Real Chromium 155 on a Surface Pro 9 (2.5× scale, 1152 CSS px wide).</sub>
+
 ## Install
 
 | Method | Auto-update | How |
